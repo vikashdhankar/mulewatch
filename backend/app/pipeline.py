@@ -3,8 +3,8 @@ import hashlib
 from collections import defaultdict
 from datetime import datetime
 
-from . import llm
-from .alerts import maybe_alert
+from . import complaints, evidence, jurisdiction, llm, recruiter
+from .alerts import maybe_alert, notify
 from .config import MEDIA_DIR, level_for
 from .coordination import compute as compute_coordination
 from .coordination import ring_boost
@@ -42,7 +42,7 @@ def _apply_analysis(post: Post, a: dict):
 def ingest(session, *, text: str = "", platform: str = "unknown", author: str = "", url: str = "",
            image_path: str = "", posted_at: datetime | None = None, source: str = "manual",
            ocr_hint: str = "", use_llm: bool = False, train_label: int | None = None,
-           recompute: bool = True, extra_images: list[str] | None = None) -> Post:
+           recompute: bool = True, extra_images: list[str] | None = None, html: str = "") -> Post:
     ocr_text, ph = "", ""
     if image_path:
         full = str(MEDIA_DIR / image_path)
@@ -67,8 +67,12 @@ def ingest(session, *, text: str = "", platform: str = "unknown", author: str = 
     post.risk_level = level_for(post.risk_score)
     post.category = categorize(set(a["groups"]), a["entities"], post.risk_score)
     post.evidence_hash = _evidence_hash(post)
+    post.status = "NEW"
+    post.jurisdiction = jurisdiction.suggest(post)
     session.add(post)
     session.flush()
+    if source != "preview":
+        evidence.capture(session, post, html)
     if recompute:
         recompute_all(session, alert=True)
     return post
@@ -89,7 +93,8 @@ def watch_hits(post: Post, watch: list[WatchItem]) -> list[str]:
 
 
 def recompute_all(session, alert: bool = True, push: bool = True):
-    """Re-run coordination over the whole corpus and refresh final scores."""
+    """Re-run coordination over the whole corpus and refresh final scores, complaint links, recruiter
+    priority and reappearance after takedown."""
     posts = session.query(Post).all()
     if not posts:
         return
@@ -100,6 +105,9 @@ def recompute_all(session, alert: bool = True, push: bool = True):
         if root is not None:
             clusters[root].append(p)
     watch = session.query(WatchItem).all()
+    gained = {p.id for p in complaints.match_posts(session, posts)}
+    removed = {p.id: p.removed_at for p in posts if p.removed_at}
+    reappeared = []
 
     for p in posts:
         prev = p.risk_level if p.id and p.risk_score is not None and p.scores.get("final_done") else None
@@ -117,15 +125,40 @@ def recompute_all(session, alert: bool = True, push: bool = True):
         rel = coord[p.id]["related"]
         p.related = sorted(({"id": o, "why": sorted(w)} for o, w in rel.items()),
                            key=lambda r: (-len(r["why"]), r["id"]))[:25]
+        # a post linked to content that was taken down, and seen after the takedown: it came back
+        if p.repost_of is None and p.id not in removed and p.source != "preview":
+            back = [o for o in rel if o in removed and (p.ingested_at or datetime.utcnow()) > removed[o]]
+            if back:
+                p.repost_of = min(back)
+                reappeared.append(p)
         final = finalize(base, boost, hits)
+        if p.complaint_count:
+            final = max(final, 90.0)
+        if p.repost_of is not None:
+            final = max(final, 85.0)
         p.risk_score = final
         p.risk_level = level_for(final)
         p.category = categorize(set(p.scores.get("groups", [])), p.entities or {}, final)
         p.scores = dict(p.scores, ring_boost=boost, watchlist=hits, final=final, final_done=True,
-                        ring_platforms=platforms)
+                        ring_platforms=platforms, complaints=complaints.describe(p),
+                        repost=(f"Reappeared after takedown of MW-{p.repost_of:05d}" if p.repost_of else ""))
         if alert:
             maybe_alert(session, p, hits, previous_level=prev, push_allowed=push)
+
+    scores = recruiter.compute(posts)
+    for p in posts:
+        p.recruiter_score, p.recruiter_reasons = scores.get(p.id, (0.0, []))
+
+    if alert:
+        for p in posts:
+            if p.id in gained and p.source != "preview":
+                notify(session, p, complaints.describe(p) + ". Open the case to see the complaints.", push=push)
+        for p in reappeared:
+            why = next((r["why"] for r in p.related or [] if r["id"] == p.repost_of), [])
+            notify(session, p, f"Reappeared after takedown: linked to MW-{p.repost_of:05d} (removed) by "
+                               + (", ".join(why[:2]) or "shared identifiers"), push=push)
     session.commit()
+    evidence.queue_screenshots(posts)
 
 
 def rescore_all(session, alert: bool = False):
@@ -133,6 +166,7 @@ def rescore_all(session, alert: bool = False):
     startup so cases captured by an older version are scored with the current rules."""
     stats = keyword_stats(session)
     for p in session.query(Post).all():
+        p.jurisdiction = jurisdiction.suggest(p)
         llm_res = p.llm if p.llm and "score" in p.llm else None
         a = analyze(p.text or "", p.ocr_text or "", stats, llm_res, citizen=p.source == "citizen")
         extra = [r for r in (p.reasons or []) if r.startswith(("Posted as a comment", "Citizen report:"))]

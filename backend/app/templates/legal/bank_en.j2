@@ -1,0 +1,55 @@
+>> No. {{ ref }}/BK-{{ bank.code or "X" }}
+>> Date: {{ today }}
+
+To,
+The Nodal Officer (Cyber Fraud / Law Enforcement Requests),
+{{ bank.name if bank.code else "[[Name of the bank]]" }}
+[[Address / nodal e-mail]]
+
+# REQUEST FOR INFORMATION AND ACTION — SUSPECTED MULE ACCOUNTS
+
+**Subject:** Accounts / UPI IDs advertised for sale or rent online — MuleWatch case {{ case }}{% if fir_number %}, FIR No. {{ fir_number }}{% endif %}
+
+Sir/Madam,
+
+The identifiers listed below appeared in content on {{ platform_short }} offering bank accounts, ATM/debit cards or UPI IDs for sale or rent (URL: {{ url }}, observed on {{ captured_at }}). Accounts traded this way are commonly used as mule accounts to receive the proceeds of cyber fraud. The identifiers below relate to your bank.
+
+## 1. Identifiers
+
+| Type | Identifier | Note |
+|---|---|---|
+{% for it in bank.rows %}| {{ it.kind_label }} | {{ it.value }} | {{ it.detail }} |
+{% endfor %}
+{% if complaints %}
+## 2. Linked victim complaints
+
+These identifiers also appear in the following complaints received by this unit:
+
+| Complaint No. | Date | Amount (₹) | District |
+|---|---|---|---|
+{% for c in complaints %}| {{ c.complaint_id }} | {{ c.date }} | {{ c.amount_fmt }} | {{ c.district }} |
+{% endfor %}
+{% endif %}
+## {{ "3" if complaints else "2" }}. Information requested
+
+Under [[legal provision — e.g. Section 94 BNSS; officer to confirm]], please provide for each account above (for a UPI ID, the account it is linked to):
+
+- KYC documents and account opening form, with the photograph and the mobile number and e-mail registered.
+- Account statement from [[from date]] to [[to date]].
+- Internet banking, mobile banking and UPI access logs with IP addresses and device details for the same period.
+- Other accounts held with your bank under the same KYC, mobile number or device.
+- Details of ATM/debit cards issued on the account and where they were last used.
+
+## {{ "4" if complaints else "3" }}. Action requested
+
+- Flag the account(s) for review under your bank's fraud risk management process and inform this office of the outcome.
+{% if complaints %}- Mark a lien on the amount in dispute in the complaints above, as per the procedure of the Citizen Financial Cyber Fraud Reporting and Management System.
+{% endif %}- A debit freeze or attachment of an account will be sought separately through a Magistrate's order under Section 107 BNSS where required [[officer to decide; the Bombay High Court held on 20 Nov 2025 that a debit freeze cannot be ordered under Section 106 BNSS]].
+
+Please send the information to the e-mail below, quoting the reference number above.
+
+~~
+({{ officer.name }})
+{{ officer.designation }}
+{{ officer.police_station }}
+[[Official e-mail and phone]]

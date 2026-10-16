@@ -1,0 +1,47 @@
+>> MuleWatch case {{ case }}{% if fir_number %} · FIR No. {{ fir_number }}{% endif %}
+>> Date: {{ today }}
+
+# CERTIFICATE UNDER SECTION 63(4)(c) OF THE BHARATIYA SAKSHYA ADHINIYAM, 2023
+
+This draft follows the Part A / Part B structure of the certificate in the Schedule to the Adhiniyam. [[Check it against the Schedule as published and complete every highlighted field before signing.]]
+
+## PART A (to be filled by the party producing the electronic record)
+
+I, {{ officer.name }}, {{ officer.designation }}, {{ officer.police_station }}, [[residential / official address]], do hereby solemnly affirm and sincerely state as follows:
+
+- The electronic records listed in the table below were produced by the computer system described here, which I [[am in lawful control of / am responsible for]]: {{ system.software }} running on {{ system.os }} (host name {{ system.hostname }}), [[make, model and serial number of the computer; location]].
+- The system was used regularly during the relevant period to capture and store publicly available online content for the purposes of this office.
+- Throughout the relevant period the system was operating properly, [[or: describe any period it was not and why that does not affect the records]].
+- The records were captured automatically at the times shown, from the source URL shown, and have been stored without alteration since capture. Their SHA-256 hash values were computed and recorded at the time of capture.
+
+| No. | Record | Captured (IST) | Size (bytes) | Source |
+|---|---|---|---|---|
+{% for f in evidence %}| {{ loop.index }} | {{ f.name }} ({{ f.kind }}) | {{ f.captured }} | {{ f.size }} | {{ f.source_url or "—" }} |
+{% endfor %}
+
+~~
+(Signature) [[sign]]
+Name: {{ officer.name }}
+Designation: {{ officer.designation }}
+Date: {{ today }}
+Place: [[place]]
+
+## PART B (to be filled by the expert)
+
+I, [[name of expert]], [[qualification / designation]], do hereby solemnly affirm and sincerely state that the electronic records listed above were produced from [[the computer system described in Part A]] and that their hash values are as follows:
+
+| No. | Record | Hash value |
+|---|---|---|
+{% for f in evidence %}| {{ loop.index }} | {{ f.name }} | {{ f.sha256 }} |
+{% endfor %}
+
+Hash algorithm used: [x] SHA-256   [ ] SHA-1   [ ] MD5   [ ] Other: ____
+
+~~
+(Signature) [[sign]]
+Name: [[name of expert]]
+Designation: [[designation]]
+Date: [[date]]
+Place: [[place]]
+
+Note: the Supreme Court upheld Section 63(4) in Pune Bar Association v. Union of India (22 May 2026) and indicated that persons with special skill in computer science or cyber forensics may sign Part B, while leaving the question open. [[Confirm who will sign Part B in this case.]]

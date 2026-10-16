@@ -83,6 +83,8 @@ RX = {
     "phone": re.compile(r"(?<![\d])(?:\+?91[\s\-.]?|0)?[6-9](?:[\s\-.]?\d){9}(?![\d])"),
     "ifsc": re.compile(r"\b([A-Z]{4}0[A-Z0-9]{6})\b"),
     "card_number": re.compile(r"(?<!\d)((?:\d{4}[\s\-]?){3}\d{4}|(?:\d{4}[\s\-]?){2}[Xx*]{4}[\s\-]?\d{4}|(?:[Xx*]{4}[\s\-]?){3}\d{4})(?!\d)"),
+    # a bank account number given with a label (a/c, account no, khata sankhya ...); bare digit runs are too ambiguous
+    "bank_account": re.compile(r"(?:\ba/?c|\bacc(?:ount|t)?|\bkhata|खाता)\s*(?:no\.?|number|num|sankhya|संख्या|#)?\s*[:.\-#]?\s*(\d(?:[\s\-]?\d){8,17})(?!\d)", re.I),
     "crypto_wallet": re.compile(r"\b(T[1-9A-HJ-NP-Za-km-z]{33}|0x[a-fA-F0-9]{40}|bc1[a-z0-9]{25,59})\b"),
     # a number offered for contact that isn't a valid Indian mobile (typo or deliberately broken)
     "phone_like": re.compile(r"(?:contact|call|whatsapp|wa|msg|message|dm|ping|sampark|संपर्क)\D{0,8}?(\+?\d[\d\s-]{6,14}\d)", re.I),
@@ -118,7 +120,7 @@ def _norm_phone(p: str) -> str:
 
 def extract_entities(text: str) -> dict:
     out: dict[str, list] = {k: [] for k in
-                            ("phone", "upi", "telegram", "whatsapp", "url", "email", "ifsc",
+                            ("phone", "upi", "telegram", "whatsapp", "url", "email", "ifsc", "bank_account",
                              "card_number", "crypto_wallet", "price", "handle", "phone_like")}
     spans: list[dict] = []
 
@@ -171,6 +173,11 @@ def extract_entities(text: str) -> dict:
             if not raw.isdigit() or _luhn_ok(raw) or True:   # keep even non-Luhn: often fake samples
                 add("card_number", masked, m, 1)
                 consumed.append((m.start(), m.end()))
+    for m in RX["bank_account"].finditer(text):
+        digits = re.sub(r"\D", "", m.group(1))
+        if free(m) and not (len(digits) == 10 and digits[0] in "6789"):
+            add("bank_account", digits, m, 1)
+            consumed.append((m.start(1), m.end(1)))
     for m in RX["phone"].finditer(text):
         if free(m):
             add("phone", _norm_phone(m.group(0)), m)

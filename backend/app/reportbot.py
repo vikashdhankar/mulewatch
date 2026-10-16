@@ -245,6 +245,9 @@ def handle_update(update: dict, tg) -> None:
     if text.startswith("/alerts"):
         tg.send(chat_id, _link_alerts(chat_id, text.split()[1:], msg))
         return
+    if text.startswith("/officer"):
+        tg.send(chat_id, _link_officer(chat_id, text.split()[1:]))
+        return
     if text.startswith("/"):
         tg.send(chat_id, "Send me a suspicious message, link or screenshot. /help explains how.")
         return
@@ -338,6 +341,25 @@ def _link_alerts(chat_id, args, msg) -> str:
     set_setting("alert_chat_name", who[:60])
     return ("✅ Linked. This chat will now get MuleWatch <b>Critical</b> alerts (and watchlist hits).\n"
             "Send <code>/alerts off</code> to stop.")
+
+
+def _link_officer(chat_id, args) -> str:
+    """An officer links their own Telegram with the code from their profile in the command center."""
+    from . import audit
+    from .db import User
+    if not args or not args[0].isdigit():
+        return ("To get case alerts and the daily brief here, open the command center → your name → "
+                "<b>Link Telegram</b>, then send <code>/officer</code> followed by the code shown there.")
+    with SessionLocal() as s:
+        u = s.query(User).filter(User.telegram_code == args[0], User.active).first()
+        if not u:
+            return "That code isn't valid any more. Get a new one from the command center."
+        u.telegram_chat_id, u.telegram_code = str(chat_id), ""
+        s.commit()
+        audit.log(u, "user.telegram_linked")
+        name = u.name
+    return (f"✅ Linked to <b>{name}</b>. You'll get alerts for cases assigned to you"
+            " (and the daily brief if you're a supervisor).")
 
 
 def _status_text(chat_id) -> str:

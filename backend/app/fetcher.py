@@ -253,7 +253,7 @@ def _telegram_post(url: str):
     dt = re.search(r'<time datetime="([^"]+)"', page)
     return {"title": "", "text": text.strip(), "author": "@" + ch + (f" ({unescape(owner.group(1))})" if owner else ""),
             "images": [img.group(1)] if img else [], "posted_at": dt.group(1) if dt else "", "platform": "Telegram",
-            "how": "Telegram public post preview"}
+            "how": "Telegram public post preview", "html": page}
 
 
 # ----------------------------------------------------------------------------- main entry
@@ -285,15 +285,17 @@ def fetch_url(url: str) -> dict:
                 raise FetchError(f"Unsupported image type {ctype}.")
             return {"url": url, "final_url": final, "platform": platform_for(final), "author": "", "title": "",
                     "text": "", "image_paths": [name], "posted_at": "", "how": "Direct image link (text read by OCR)",
-                    "note": ""}
+                    "note": "", "html": ""}
         if "html" not in ctype and "xml" not in ctype and ctype:
             raise FetchError(f"That link is a {ctype or 'file'}, not a web page or image.")
         page = _Page()
+        raw_html = data.decode("utf-8", "replace")
         try:
-            page.feed(data.decode("utf-8", "replace"))
+            page.feed(raw_html)
         except Exception:
             pass
         info = _from_page(page, final)
+        info["html"] = raw_html
 
     lines = [ln.strip() for x in (info["title"], info["text"]) if x for ln in x.splitlines() if ln.strip()]
     text = "\n".join(dict.fromkeys(lines))[:MAX_TEXT]          # title is often repeated in the body
@@ -314,7 +316,7 @@ def fetch_url(url: str) -> dict:
                 "while logged in.")
     return {"url": url, "final_url": final, "platform": info.get("platform") or platform_for(final),
             "author": info["author"], "title": info["title"], "text": text, "image_paths": images,
-            "posted_at": info["posted_at"], "how": info["how"], "note": note}
+            "posted_at": info["posted_at"], "how": info["how"], "note": note, "html": info.get("html", "")}
 
 
 def _from_page(page: _Page, final: str) -> dict:

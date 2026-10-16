@@ -6,15 +6,16 @@ import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image as PILImage
 from sqlalchemy import func
 
-from . import crawler, llm, reportbot
+from . import audit, auth, crawler, evidence, llm, masking, police_api, reportbot, workflow
 from .alerts import telegram_enabled
+from .auth import can, current_user, ip_of, require
 from .config import LEVEL_RANK, MEDIA_DIR, ROOT_DIR
 from .coordination import entity_keys
 from .db import Alert, Post, Report, SessionLocal, Source, WatchItem, init_db
@@ -23,14 +24,19 @@ from .ml import model, retrain
 from .pipeline import apply_feedback, ingest, recompute_all, training_samples
 from .report import build_report
 
-app = FastAPI(title="MuleWatch", version="1.0")
+app = FastAPI(title="MuleWatch", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.middleware("http")(auth.auth_middleware)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+app.include_router(auth.router)
+app.include_router(auth.users_router)
+app.include_router(police_api.router)
 
 
 @app.on_event("startup")
 def startup():
     init_db()
+    auth.ensure_demo_users()
     if not model().trained:
         with SessionLocal() as s:
             retrain(training_samples(s))
@@ -40,6 +46,7 @@ def startup():
     crawler.ensure_default_sources()
     crawler.start()
     reportbot.start()
+    workflow.start()
 
 
 # ----------------------------------------------------------------------------- serializers
@@ -54,7 +61,11 @@ def summary(p: Post) -> dict:
         "posted_at": p.posted_at.isoformat() if p.posted_at else None,
         "ingested_at": p.ingested_at.isoformat() if p.ingested_at else None,
         "top_reason": (p.reasons or [""])[0],
-        "entities": {k: v[:3] for k, v in (p.entities or {}).items() if k in ("phone", "upi", "telegram", "whatsapp")},
+        "status": p.status or "NEW", "assigned_to": p.assigned_to, "recruiter_score": p.recruiter_score or 0,
+        "complaint_count": p.complaint_count or 0, "complaint_amount": p.complaint_amount or 0,
+        "repost_of": p.repost_of, "district": (p.jurisdiction or {}).get("district", ""),
+        "entities": {k: v[:3] for k, v in (p.entities or {}).items()
+                     if k in ("phone", "upi", "telegram", "whatsapp", "bank_account")},
         "reports": getattr(p, "_reports", 0),
     }
 
@@ -88,9 +99,12 @@ def detail(s, p: Post) -> dict:
 # ----------------------------------------------------------------------------- posts
 
 @app.get("/api/posts")
-def list_posts(level: str | None = None, platform: str | None = None, category: str | None = None,
+def list_posts(request: Request, level: str | None = None, platform: str | None = None, category: str | None = None,
                q: str | None = None, cluster: int | None = None, label: str | None = None, source: str | None = None,
-               sort: str = "recent", limit: int = Query(50, le=500), offset: int = 0):
+               status: str | None = None, assigned: str | None = None, complaints: bool = False,
+               sort: str = "recent", limit: int = Query(50, le=500), offset: int = 0, u=Depends(current_user)):
+    if q:
+        audit.log(u, "cases.searched", detail={"q": q[:100]}, ip=ip_of(request))
     with SessionLocal() as s:
         qry = s.query(Post)
         if level:
@@ -105,26 +119,55 @@ def list_posts(level: str | None = None, platform: str | None = None, category: 
             qry = qry.filter(Post.source == source)
         if label:
             qry = qry.filter(Post.label == (None if label == "pending" else label))
+        if status:
+            qry = qry.filter(Post.status.in_(status.split(",")))
+        if assigned == "me":
+            qry = qry.filter(Post.assigned_to == u.id)
+        elif assigned == "none":
+            qry = qry.filter(Post.assigned_to.is_(None))
+        if complaints:
+            qry = qry.filter(Post.complaint_count > 0)
         if q:
             like = f"%{q}%"
-            qry = qry.filter((Post.text.like(like)) | (Post.ocr_text.like(like)) | (Post.author.like(like)))
+            digits = "".join(c for c in q if c.isdigit())
+            cond = (Post.text.like(like)) | (Post.ocr_text.like(like)) | (Post.author.like(like))
+            if len(digits) >= 6:          # a number typed with or without spaces / +91
+                cond = cond | Post.entities.like(f"%{digits[-10:]}%")
+            qry = qry.filter(cond)
+        qry = qry.filter(Post.source != "preview")
         total = qry.count()
-        order = Post.risk_score.desc() if sort == "risk" else Post.id.desc()
-        rows = _attach_report_counts(s, qry.order_by(order).offset(offset).limit(limit).all())
-        return {"total": total, "items": [summary(p) for p in rows]}
+        order = {"risk": [Post.risk_score.desc()],
+                 "recruiter": [Post.recruiter_score.desc(), Post.risk_score.desc()]}.get(sort, [Post.id.desc()])
+        rows = _attach_report_counts(s, qry.order_by(*order).offset(offset).limit(limit).all())
+        return {"total": total, "items": [masking.apply(summary(p), u) for p in rows]}
+
+
+_last_view: dict[tuple, float] = {}
+
+
+def _log_view(u, pid: int, ip: str):
+    """Case views go to the audit log; repeat views by the same person within 15 minutes are one entry
+    (the page refreshes itself whenever new posts arrive)."""
+    import time
+    key = (u.username, pid)
+    if time.time() - _last_view.get(key, 0) > 900:
+        _last_view[key] = time.time()
+        audit.log(u, "case.viewed", pid, ip=ip)
 
 
 @app.get("/api/posts/{pid}")
-def get_post(pid: int):
+def get_post(pid: int, request: Request, u=Depends(current_user)):
     with SessionLocal() as s:
         p = s.get(Post, pid)
         if not p:
             raise HTTPException(404)
-        return detail(s, p)
+        out = masking.apply(detail(s, p), u)
+    _log_view(u, pid, ip_of(request))
+    return out
 
 
 @app.post("/api/posts/{pid}/feedback")
-def feedback(pid: int, label: str = Body(..., embed=True)):
+def feedback(pid: int, request: Request, label: str = Body(..., embed=True), u=Depends(current_user)):
     if label not in ("confirmed", "false_positive", "clear"):
         raise HTTPException(400, "label must be confirmed | false_positive | clear")
     with SessionLocal() as s:
@@ -135,11 +178,16 @@ def feedback(pid: int, label: str = Body(..., embed=True)):
         s.commit()
         if label in ("confirmed", "false_positive"):
             reportbot.notify_reporters(pid, label)
-        return detail(s, s.get(Post, pid))
+        out = masking.apply(detail(s, s.get(Post, pid)), u)
+    audit.log(u, "case.verdict", pid, {"label": label}, ip_of(request))
+    return out
 
 
 @app.post("/api/posts/{pid}/takedown")
-def takedown(pid: int):
+def takedown(pid: int, request: Request, u=Depends(require("IO"))):
+    """The demo forum's moderation API stands in for the platform acting on a notice: the content is
+    removed at once, so the case moves to Content removed (and its removal clock stops)."""
+    from datetime import datetime as _dt
     with SessionLocal() as s:
         p = s.get(Post, pid)
         if not p:
@@ -147,13 +195,20 @@ def takedown(pid: int):
         ok, msg = crawler.request_takedown(p)
         if ok:
             p.takedown = "requested"
+            now = _dt.utcnow()
+            if not p.notice_sent_at:
+                p.notice_sent_at = now
+            p.status, p.removed_at, p.status_changed_at = "CONTENT_REMOVED", now, now
             s.commit()
             reportbot.notify_reporters(pid, "takedown")
-        return {"ok": ok, "message": msg}
+            recompute_all(s, alert=True)
+    audit.log(u, "case.takedown_requested", pid, {"ok": ok, "message": msg[:150]}, ip_of(request))
+    return {"ok": ok, "message": msg}
 
 
 @app.get("/api/posts/{pid}/report.pdf")
-def report(pid: int):
+def report(pid: int, request: Request, u=Depends(current_user)):
+    from .complaints import describe
     with SessionLocal() as s:
         p = s.get(Post, pid)
         if not p:
@@ -161,7 +216,8 @@ def report(pid: int):
         rel_ids = [r["id"] for r in p.related or []]
         rel = s.query(Post).filter(Post.id.in_(rel_ids)).all() if rel_ids else []
         rel.sort(key=lambda x: rel_ids.index(x.id))
-        pdf = build_report(p, rel)
+        pdf = build_report(p, rel, describe(p), masked=not can(u, "IO"))
+    audit.log(u, "report.exported", pid, {"sha256": __import__("hashlib").sha256(pdf).hexdigest()}, ip_of(request))
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="MuleWatch-Case-MW-{pid:05d}.pdf"'})
 
@@ -169,9 +225,10 @@ def report(pid: int):
 # ----------------------------------------------------------------------------- analyze / ingest
 
 @app.post("/api/analyze")
-async def analyze_endpoint(text: str = Form(""), platform: str = Form("Manual submission"),
+async def analyze_endpoint(request: Request, text: str = Form(""), platform: str = Form("Manual submission"),
                            url: str = Form(""), author: str = Form(""), save: bool = Form(True),
-                           source: str = Form("manual"), image: UploadFile | None = File(None)):
+                           source: str = Form("manual"), image: UploadFile | None = File(None),
+                           u=Depends(current_user)):
     image_path = ""
     if image is not None and image.filename:
         data = await image.read()
@@ -192,7 +249,12 @@ async def analyze_endpoint(text: str = Form(""), platform: str = Form("Manual su
         (MEDIA_DIR / image_path).write_bytes(data)
     if not text.strip() and not image_path:
         raise HTTPException(400, "Provide text, a URL or an image")
-    return _score(save, text=text, platform=platform, author=author, url=url, image_path=image_path, source=source)
+    if source not in ("manual", "extension"):
+        source = "manual"
+    out = _score(save, text=text, platform=platform, author=author, url=url, image_path=image_path, source=source)
+    if save:
+        audit.log(u, "post.checked", out.get("id"), {"source": source, "url": url[:200]}, ip_of(request))
+    return masking.apply(out, u)
 
 
 def _score(save: bool, **kw) -> dict:
@@ -214,7 +276,7 @@ def _score(save: bool, **kw) -> dict:
 
 
 @app.post("/api/analyze/url")
-def analyze_url(url: str = Body(...), save: bool = Body(True)):
+def analyze_url(request: Request, url: str = Body(...), save: bool = Body(True), u=Depends(current_user)):
     """Fetch one public link (post, ad, Telegram post, web page or image) and score it."""
     from .fetcher import FetchError, fetch_url
     from .crawler import _parse_dt
@@ -223,7 +285,7 @@ def analyze_url(url: str = Body(...), save: bool = Body(True)):
         with SessionLocal() as s:
             existing = s.query(Post).filter(Post.url == url).order_by(Post.id.desc()).first()
             if existing:
-                return detail(s, existing) | {"fetch": {"already_tracked": True, "how": "Already a case",
+                return masking.apply(detail(s, existing), u) | {"fetch": {"already_tracked": True, "how": "Already a case",
                                                         "final_url": url, "note": ""}}
     try:
         f = fetch_url(url)
@@ -234,16 +296,19 @@ def analyze_url(url: str = Body(...), save: bool = Body(True)):
     imgs = f["image_paths"]
     out = _score(save, text=f["text"], platform=f["platform"], author=f["author"], url=f["final_url"],
                  image_path=imgs[0] if imgs else "", extra_images=imgs[1:], posted_at=_parse_dt(f["posted_at"]),
-                 source="url")
+                 source="url", html=f.get("html", ""))
+    if save:
+        audit.log(u, "post.checked", out.get("id"), {"source": "url", "url": url[:200]}, ip_of(request))
+    out = masking.apply(out, u)
     return out | {"fetch": {k: f[k] for k in ("final_url", "how", "note", "title")} | {"images": len(imgs)}}
 
 
 # ----------------------------------------------------------------------------- stats & trends
 
 @app.get("/api/stats")
-def stats():
+def stats(u=Depends(current_user)):
     with SessionLocal() as s:
-        posts = s.query(Post).all()
+        posts = s.query(Post).filter(Post.source != "preview").all()
         by_level = Counter(p.risk_level for p in posts)
         by_cat = Counter(p.category for p in posts if p.category != "Benign")
         by_platform = Counter((p.platform or "").split(" · ")[0] for p in posts)
@@ -286,23 +351,33 @@ def stats():
             "rings": len(ring_list), "ring_list": ring_list[:12],
             "by_category": by_cat.most_common(), "by_platform": by_platform.most_common(),
             "top_terms": terms.most_common(12),
-            "top_identifiers": [(k, n) for k, n in ids.most_common(12) if n > 1],
+            "top_identifiers": [(k if can(u, "IO") else k.split(":", 1)[0] + ":" + masking.mask_text(k.split(":", 1)[1]), n)
+                                for k, n in ids.most_common(12) if n > 1],
             "timeline": [{"bucket": k.strftime(fmt), **buckets[k]} for k in order][-30:],
             "alerts_unseen": s.query(Alert).filter_by(seen=False).count(),
             "citizen_reports": s.query(Report).count(),
+            "complaint_linked": sum(1 for p in posts if p.complaint_count),
+            "complaint_amount": sum(p.complaint_amount or 0 for p in posts if p.complaint_count),
+            "reappeared": sum(1 for p in posts if p.repost_of),
+            "open_cases": sum(1 for p in posts if (p.status or "NEW") in workflow.OPEN and LEVEL_RANK.get(p.risk_level, 0) >= 2),
+            "my_cases": sum(1 for p in posts if p.assigned_to == u.id and (p.status or "NEW") in workflow.OPEN),
+            "clocks": {st: sum(1 for p in posts if p.status == "NOTICE_SENT" and workflow.clock(p)["state"] == st)
+                       for st in ("running", "warn", "overdue")},
             "system": {"ocr": OCR_AVAILABLE, "llm": llm.enabled(), "telegram_alerts": telegram_enabled(),
-                       "model_docs": model().docs, "crawler": crawler.status()},
+                       "model_docs": model().docs, "crawler": crawler.status(),
+                       "screenshots": evidence.status()["screenshots"]},
         }
 
 
 # ----------------------------------------------------------------------------- graph
 
 KIND_LABEL = {"phone": "Phone", "upi": "UPI", "telegram": "Telegram", "whatsapp": "WhatsApp", "handle": "Handle",
-              "email": "Email", "crypto_wallet": "Wallet", "card_number": "Card", "ifsc": "IFSC", "domain": "Domain"}
+              "email": "Email", "crypto_wallet": "Wallet", "card_number": "Card", "ifsc": "IFSC", "domain": "Domain",
+              "bank_account": "Account"}
 
 
 @app.get("/api/graph")
-def graph(min_score: float = 30, cluster: int | None = None, post: int | None = None):
+def graph(min_score: float = 30, cluster: int | None = None, post: int | None = None, u=Depends(current_user)):
     with SessionLocal() as s:
         posts = s.query(Post).all()
         if post is not None:
@@ -322,14 +397,16 @@ def graph(min_score: float = 30, cluster: int | None = None, post: int | None = 
         for p in posts:
             nodes.append({"id": f"p{p.id}", "type": "post", "label": f"MW-{p.id}", "post_id": p.id,
                           "level": p.risk_level, "score": p.risk_score, "platform": p.platform.split(" · ")[0],
-                          "excerpt": (p.text or p.ocr_text or "")[:120], "author": p.author})
+                          "excerpt": (p.text or p.ocr_text or "")[:120] if can(u, "IO")
+                          else masking.mask_text((p.text or p.ocr_text or "")[:120]), "author": p.author})
         keep_single = cluster is not None or post is not None
         for k, ids in owners.items():
             if len(ids) < 2 and not keep_single:
                 continue
             kind, val = k.split(":", 1)
-            nodes.append({"id": "e:" + k, "type": kind, "label": val, "kind_label": KIND_LABEL.get(kind, kind),
-                          "count": len(ids)})
+            nodes.append({"id": "e:" + k, "type": kind,
+                          "label": val if can(u, "IO") or kind not in ("phone", "whatsapp", "bank_account")
+                          else masking.mask_text(val), "kind_label": KIND_LABEL.get(kind, kind), "count": len(ids)})
             for pid in ids:
                 edges.append({"source": f"p{pid}", "target": "e:" + k, "kind": kind})
         present = {p.id for p in posts}
@@ -348,13 +425,13 @@ def graph(min_score: float = 30, cluster: int | None = None, post: int | None = 
 # ----------------------------------------------------------------------------- alerts & live events
 
 @app.get("/api/alerts")
-def alerts(limit: int = 50):
+def alerts(limit: int = 50, u=Depends(current_user)):
     with SessionLocal() as s:
         rows = s.query(Alert).order_by(Alert.id.desc()).limit(limit).all()
         posts = {p.id: p for p in s.query(Post).filter(Post.id.in_([a.post_id for a in rows])).all()}
         return [{"id": a.id, "post_id": a.post_id, "level": a.level, "reason": a.reason, "seen": a.seen,
                  "channel": a.channel, "delivered": a.delivered, "created_at": a.created_at.isoformat(),
-                 "post": summary(posts[a.post_id]) if a.post_id in posts else None} for a in rows]
+                 "post": masking.apply(summary(posts[a.post_id]), u) if a.post_id in posts else None} for a in rows]
 
 
 @app.post("/api/alerts/seen")
@@ -366,8 +443,10 @@ def alerts_seen():
 
 
 @app.get("/api/events")
-async def events():
+async def events(request: Request):
     """Server-Sent Events: pushes new posts and alerts to the command center in real time."""
+    viewer = request.state.user
+
     async def gen():
         with SessionLocal() as s:
             last_post = s.query(func.max(Post.id)).scalar() or 0
@@ -382,13 +461,13 @@ async def events():
                     if p.source == "preview":
                         continue
                     last_post = p.id
-                    yield f"event: post\ndata: {json.dumps(summary(p))}\n\n"
+                    yield f"event: post\ndata: {json.dumps(masking.apply(summary(p), viewer))}\n\n"
                 for a in s.query(Alert).filter(Alert.id > last_alert).order_by(Alert.id).all():
                     last_alert = a.id
                     p = s.get(Post, a.post_id)
                     yield ("event: alert\ndata: " + json.dumps({
                         "id": a.id, "level": a.level, "reason": a.reason, "channel": a.channel,
-                        "post": summary(p) if p else None}) + "\n\n")
+                        "post": masking.apply(summary(p), viewer) if p else None}) + "\n\n")
             if tick % 15 == 0:
                 yield ": keep-alive\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream",
@@ -405,7 +484,11 @@ def get_watchlist():
 
 
 @app.post("/api/watchlist")
-def add_watch(kind: str = Body(...), value: str = Body(...), note: str = Body("")):
+def add_watch(request: Request, kind: str = Body(...), value: str = Body(...), note: str = Body(""),
+              u=Depends(current_user)):
+    if "•" in value:
+        raise HTTPException(400, "This number is partly hidden for your role. Ask an Investigating Officer to add it.")
+    audit.log(u, "watchlist.added", detail={"kind": kind, "value": value[:100]}, ip=ip_of(request))
     with SessionLocal() as s:
         s.add(WatchItem(kind=kind, value=value.strip(), note=note))
         s.commit()
@@ -414,18 +497,24 @@ def add_watch(kind: str = Body(...), value: str = Body(...), note: str = Body(""
 
 
 @app.delete("/api/watchlist/{wid}")
-def del_watch(wid: int):
+def del_watch(wid: int, request: Request, u=Depends(current_user)):
     with SessionLocal() as s:
         w = s.get(WatchItem, wid)
         if w:
+            audit.log(u, "watchlist.removed", detail={"kind": w.kind, "value": w.value}, ip=ip_of(request))
             s.delete(w)
             s.commit()
             recompute_all(s, alert=False)
     return get_watchlist()
 
 
+@app.get("/api/health")
+def health():
+    return {"ok": True}
+
+
 @app.get("/api/sources")
-def sources():
+def sources(u=Depends(current_user)):
     with SessionLocal() as s:
         return {"crawler": crawler.status(), "sources": [{
             "id": x.id, "kind": x.kind, "name": x.name, "url": x.url, "enabled": x.enabled,
@@ -434,7 +523,9 @@ def sources():
 
 
 @app.post("/api/sources")
-def add_source(kind: str = Body(...), url: str = Body(...), name: str = Body("")):
+def add_source(request: Request, kind: str = Body(...), url: str = Body(...), name: str = Body(""),
+               u=Depends(require("IO"))):
+    audit.log(u, "source.added", detail={"kind": kind, "url": url[:200]}, ip=ip_of(request))
     if kind not in crawler.CRAWLERS:
         raise HTTPException(400, f"kind must be one of {list(crawler.CRAWLERS)}")
     with SessionLocal() as s:
@@ -444,7 +535,8 @@ def add_source(kind: str = Body(...), url: str = Body(...), name: str = Body("")
 
 
 @app.patch("/api/sources/{sid}")
-def toggle_source(sid: int, enabled: bool = Body(..., embed=True)):
+def toggle_source(sid: int, request: Request, enabled: bool = Body(..., embed=True), u=Depends(require("IO"))):
+    audit.log(u, "source.toggled", detail={"source": sid, "enabled": enabled}, ip=ip_of(request))
     with SessionLocal() as s:
         x = s.get(Source, sid)
         if x:
@@ -454,7 +546,7 @@ def toggle_source(sid: int, enabled: bool = Body(..., embed=True)):
 
 
 @app.get("/api/bot")
-def bot_status():
+def bot_status(u=Depends(current_user)):
     with SessionLocal() as s:
         total = s.query(Report).count()
         reporters = s.query(func.count(func.distinct(Report.reporter_hash))).scalar() or 0
@@ -465,20 +557,22 @@ def bot_status():
         from .db import get_setting
         from .config import TELEGRAM_CHAT_ID
         return reportbot.status() | {
-            "alert_code": reportbot.ALERT_CODE,
             "alerts_linked": bool(alert_chat_id()),
             "alerts_to": "TELEGRAM_CHAT_ID in .env" if TELEGRAM_CHAT_ID else get_setting("alert_chat_name"),
             "reports": total, "reporters": reporters, "cases": cases,
             "last_report_at": last.isoformat() if last else None,
             "link": f"https://t.me/{reportbot.status()['username']}" if reportbot.status()["username"] else "",
+            "alert_code": reportbot.ALERT_CODE if can(u, "SUPERVISOR") else "",
             "recent": [{"post_id": p.id, "risk_level": p.risk_level, "risk_score": p.risk_score,
-                        "excerpt": (p.text or p.ocr_text or "")[:120], "origin": r.origin,
+                        "excerpt": masking.mask_text((p.text or p.ocr_text or "")[:120]) if not can(u, "IO")
+                        else (p.text or p.ocr_text or "")[:120], "origin": r.origin,
                         "at": r.created_at.isoformat()} for r, p in recent],
         }
 
 
 @app.delete("/api/bot/alerts")
-def unlink_alerts():
+def unlink_alerts(request: Request, u=Depends(require("SUPERVISOR"))):
+    audit.log(u, "bot.alerts_unlinked", ip=ip_of(request))
     from .db import set_setting
     set_setting("alert_chat_id", None)
     set_setting("alert_chat_name", None)

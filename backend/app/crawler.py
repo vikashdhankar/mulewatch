@@ -124,7 +124,8 @@ def crawl_forum(session, src: Source) -> int:
                 image = _download_image(urljoin(base + "/", d["image"]), f"forum_{pid}_{fp}")
             p = ingest(session, text=text, platform=platform, author=(d.get("author") or {}).get("name", ""),
                        url=f"{base}/p/{pid}", image_path=image,
-                       posted_at=_parse_dt(d.get("datePublished", "")), source="forum", recompute=False)
+                       posted_at=_parse_dt(d.get("datePublished", "")), source="forum", recompute=False,
+                       html=page.text)
             p.remote_id = rid
             known.add(rid)
             new += 1
@@ -137,7 +138,8 @@ def crawl_forum(session, src: Source) -> int:
             c = ingest(session, text=cm["text"], platform=platform + " · comment",
                        author=(cm.get("author") or {}).get("name", ""),
                        url=cm.get("url") or f"{base}/p/{pid}#c{cm.get('identifier')}",
-                       posted_at=_parse_dt(cm.get("dateCreated", "")), source="forum", recompute=False)
+                       posted_at=_parse_dt(cm.get("dateCreated", "")), source="forum", recompute=False,
+                       html=page.text)
             c.remote_id = crid
             c.reasons = (c.reasons or []) + [f"Posted as a comment on “{title[:80]}”"]
             known.add(crid)
@@ -166,7 +168,8 @@ def crawl_telegram(session, src: Source) -> int:
         if not text and not image:
             continue
         p = ingest(session, text=text, platform="Telegram", author="@" + channel, url=f"https://t.me/{post_id}",
-               image_path=image, posted_at=_parse_dt(dt.group(1)) if dt else None, source="telegram", recompute=False)
+               image_path=image, posted_at=_parse_dt(dt.group(1)) if dt else None, source="telegram", recompute=False,
+               html=block)
         p.remote_id = post_id
         new += 1
     return new
@@ -190,7 +193,7 @@ def crawl_page(session, src: Source) -> int:
     imgs = f["image_paths"]
     p = ingest(session, text=f["text"], platform=f["platform"], author=f["author"], url=f["final_url"],
                image_path=imgs[0] if imgs else "", extra_images=imgs[1:], posted_at=_parse_dt(f["posted_at"]),
-               source="page", recompute=False)
+               source="page", recompute=False, html=f.get("html", ""))
     p.remote_id = f"{src.url}#{fp}"
     src.cursor = fp
     return 1

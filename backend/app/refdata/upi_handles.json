@@ -1,0 +1,207 @@
+{
+ "_note": "UPI handle (the part after @) -> app and sponsor/PSP bank (IFSC bank code). The sponsor bank holds the VPA-to-account mapping, so it can identify which account (at any bank) the UPI ID is linked to. Handles change; check against NPCI's list of live PSPs before relying on this. Leave bank empty when unsure.",
+ "ybl": [
+  "PhonePe",
+  "YESB"
+ ],
+ "ibl": [
+  "PhonePe",
+  "ICIC"
+ ],
+ "axl": [
+  "PhonePe",
+  "UTIB"
+ ],
+ "okaxis": [
+  "Google Pay",
+  "UTIB"
+ ],
+ "okhdfcbank": [
+  "Google Pay",
+  "HDFC"
+ ],
+ "okicici": [
+  "Google Pay",
+  "ICIC"
+ ],
+ "oksbi": [
+  "Google Pay",
+  "SBIN"
+ ],
+ "paytm": [
+  "Paytm (old handle)",
+  "PYTM"
+ ],
+ "ptyes": [
+  "Paytm",
+  "YESB"
+ ],
+ "ptaxis": [
+  "Paytm",
+  "UTIB"
+ ],
+ "pthdfc": [
+  "Paytm",
+  "HDFC"
+ ],
+ "ptsbi": [
+  "Paytm",
+  "SBIN"
+ ],
+ "apl": [
+  "Amazon Pay",
+  "UTIB"
+ ],
+ "yapl": [
+  "Amazon Pay",
+  "YESB"
+ ],
+ "rapl": [
+  "Amazon Pay",
+  "RATN"
+ ],
+ "waaxis": [
+  "WhatsApp Pay",
+  "UTIB"
+ ],
+ "wahdfcbank": [
+  "WhatsApp Pay",
+  "HDFC"
+ ],
+ "waicici": [
+  "WhatsApp Pay",
+  "ICIC"
+ ],
+ "wasbi": [
+  "WhatsApp Pay",
+  "SBIN"
+ ],
+ "upi": [
+  "BHIM (NPCI)",
+  ""
+ ],
+ "sbi": [
+  "SBI app",
+  "SBIN"
+ ],
+ "icici": [
+  "ICICI Bank app",
+  "ICIC"
+ ],
+ "hdfcbank": [
+  "HDFC Bank app",
+  "HDFC"
+ ],
+ "axisbank": [
+  "Axis Bank app",
+  "UTIB"
+ ],
+ "kotak": [
+  "Kotak app",
+  "KKBK"
+ ],
+ "pnb": [
+  "PNB app",
+  "PUNB"
+ ],
+ "boi": [
+  "Bank of India app",
+  "BKID"
+ ],
+ "cnrb": [
+  "Canara Bank app",
+  "CNRB"
+ ],
+ "barodampay": [
+  "Bank of Baroda app",
+  "BARB"
+ ],
+ "unionbank": [
+  "Union Bank app",
+  "UBIN"
+ ],
+ "unionbankofindia": [
+  "Union Bank app",
+  "UBIN"
+ ],
+ "idfcbank": [
+  "IDFC FIRST app",
+  "IDFB"
+ ],
+ "indus": [
+  "IndusInd app",
+  "INDB"
+ ],
+ "yesbank": [
+  "Yes Bank app",
+  "YESB"
+ ],
+ "fbl": [
+  "Federal Bank",
+  "FDRL"
+ ],
+ "federal": [
+  "Federal Bank",
+  "FDRL"
+ ],
+ "fifederal": [
+  "Fi",
+  "FDRL"
+ ],
+ "airtel": [
+  "Airtel Payments Bank",
+  "AIRP"
+ ],
+ "jio": [
+  "Jio Payments Bank",
+  "JIOP"
+ ],
+ "jupiteraxis": [
+  "Jupiter",
+  "UTIB"
+ ],
+ "freecharge": [
+  "Freecharge",
+  "UTIB"
+ ],
+ "naviaxis": [
+  "Navi",
+  "UTIB"
+ ],
+ "superyes": [
+  "super.money",
+  "YESB"
+ ],
+ "ikwik": [
+  "MobiKwik",
+  "HDFC"
+ ],
+ "abfspay": [
+  "ABFS app",
+  ""
+ ],
+ "slc": [
+  "slice",
+  ""
+ ],
+ "aubank": [
+  "AU Small Finance Bank",
+  "AUBL"
+ ],
+ "rbl": [
+  "RBL Bank",
+  "RATN"
+ ],
+ "dbs": [
+  "DBS Bank",
+  "DBSS"
+ ],
+ "sib": [
+  "South Indian Bank",
+  "SIBL"
+ ],
+ "kvb": [
+  "Karur Vysya Bank",
+  "KVBL"
+ ]
+}

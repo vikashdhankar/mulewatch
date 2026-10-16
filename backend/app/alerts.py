@@ -80,3 +80,69 @@ def maybe_alert(session, post, watch_hits: list[str] | None = None, previous_lev
                     s.commit()
         threading.Thread(target=worker, daemon=True).start()
     return alert
+
+
+def send_to_chat(chat_id: str, text: str) -> bool:
+    try:
+        root = os.getenv("TELEGRAM_API_BASE", "https://api.telegram.org").rstrip("/")
+        r = requests.post(f"{root}/bot{alert_token()}/sendMessage",
+                          json={"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                                "disable_web_page_preview": True}, timeout=10)
+        return r.ok
+    except requests.RequestException:
+        return False
+
+
+def send_document(chat_id: str, filename: str, data: bytes, caption: str = "") -> bool:
+    try:
+        root = os.getenv("TELEGRAM_API_BASE", "https://api.telegram.org").rstrip("/")
+        r = requests.post(f"{root}/bot{alert_token()}/sendDocument",
+                          data={"chat_id": chat_id, "caption": caption[:1000], "parse_mode": "HTML"},
+                          files={"document": (filename, data, "application/pdf")}, timeout=30)
+        return r.ok
+    except requests.RequestException:
+        return False
+
+
+def officer_chats(session, roles=("SUPERVISOR",), user_ids=()) -> list[str]:
+    """Telegram chats linked by officers (/officer <code>) with any of these roles, or these users."""
+    from .db import User
+    q = session.query(User).filter(User.active, User.telegram_chat_id != "")
+    out = []
+    for u in q.all():
+        if u.role in roles or u.id in user_ids:
+            out.append(u.telegram_chat_id)
+    return out
+
+
+def notify(session, post, reason: str, push: bool = True, chats: list[str] | None = None,
+           level: str | None = None):
+    """An alert that isn't tied to a risk level change (complaint match, reappearance, takedown clock).
+    Shown in the command center; pushed to the alert chat and any officer chats given."""
+    alert = Alert(post_id=post.id, level=level or post.risk_level, reason=reason[:300])
+    session.add(alert)
+    session.flush()
+    if not push or not alert_token():
+        return alert
+    targets = set(chats or [])
+    if alert_chat_id():
+        targets.add(alert_chat_id())
+    if not targets:
+        return alert
+    msg = (f"🚨 <b>MuleWatch</b> — case MW-{post.id:05d} ({_esc(post.category)}, score {post.risk_score:.0f})\n"
+           f"{_esc(reason)}\n\n🔎 {PUBLIC_BASE_URL}/case/{post.id}")
+    alert.channel = "telegram"
+    aid = alert.id
+
+    def worker():
+        import time
+        from .db import SessionLocal
+        ok = all([send_to_chat(c, msg) for c in targets])
+        time.sleep(1.5)
+        with SessionLocal() as s:
+            a = s.get(Alert, aid)
+            if a:
+                a.delivered = ok
+                s.commit()
+    threading.Thread(target=worker, daemon=True).start()
+    return alert

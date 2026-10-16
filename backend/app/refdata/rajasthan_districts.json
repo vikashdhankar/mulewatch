@@ -1,0 +1,370 @@
+{
+ "_note": "Rajasthan districts after the December 2024 reorganisation (41). Coordinates are approximate district headquarters, used only to place markers. aliases: towns, older district names and short forms that map to the district.",
+ "districts": [
+  {
+   "name": "Ajmer",
+   "hi": "अजमेर",
+   "lat": 26.45,
+   "lon": 74.64,
+   "aliases": [
+    "kishangarh",
+    "nasirabad",
+    "pushkar",
+    "किशनगढ़"
+   ]
+  },
+  {
+   "name": "Alwar",
+   "hi": "अलवर",
+   "lat": 27.55,
+   "lon": 76.6,
+   "aliases": []
+  },
+  {
+   "name": "Balotra",
+   "hi": "बालोतरा",
+   "lat": 25.83,
+   "lon": 72.24,
+   "aliases": []
+  },
+  {
+   "name": "Banswara",
+   "hi": "बांसवाड़ा",
+   "lat": 23.55,
+   "lon": 74.44,
+   "aliases": [
+    "बांसवाडा"
+   ]
+  },
+  {
+   "name": "Baran",
+   "hi": "बारां",
+   "lat": 25.1,
+   "lon": 76.51,
+   "aliases": []
+  },
+  {
+   "name": "Barmer",
+   "hi": "बाड़मेर",
+   "lat": 25.75,
+   "lon": 71.39,
+   "aliases": [
+    "बाडमेर"
+   ]
+  },
+  {
+   "name": "Beawar",
+   "hi": "ब्यावर",
+   "lat": 26.1,
+   "lon": 74.32,
+   "aliases": []
+  },
+  {
+   "name": "Bharatpur",
+   "hi": "भरतपुर",
+   "lat": 27.22,
+   "lon": 77.49,
+   "aliases": []
+  },
+  {
+   "name": "Bhilwara",
+   "hi": "भीलवाड़ा",
+   "lat": 25.35,
+   "lon": 74.63,
+   "aliases": [
+    "shahpura",
+    "भीलवाडा",
+    "शाहपुरा"
+   ]
+  },
+  {
+   "name": "Bikaner",
+   "hi": "बीकानेर",
+   "lat": 28.02,
+   "lon": 73.31,
+   "aliases": []
+  },
+  {
+   "name": "Bundi",
+   "hi": "बूंदी",
+   "lat": 25.44,
+   "lon": 75.64,
+   "aliases": []
+  },
+  {
+   "name": "Chittorgarh",
+   "hi": "चित्तौड़गढ़",
+   "lat": 24.88,
+   "lon": 74.62,
+   "aliases": [
+    "chittaurgarh",
+    "chittor",
+    "nimbahera",
+    "चित्तौडगढ़"
+   ]
+  },
+  {
+   "name": "Churu",
+   "hi": "चूरू",
+   "lat": 28.3,
+   "lon": 74.95,
+   "aliases": []
+  },
+  {
+   "name": "Dausa",
+   "hi": "दौसा",
+   "lat": 26.89,
+   "lon": 76.33,
+   "aliases": []
+  },
+  {
+   "name": "Deeg",
+   "hi": "डीग",
+   "lat": 27.47,
+   "lon": 77.33,
+   "aliases": []
+  },
+  {
+   "name": "Dholpur",
+   "hi": "धौलपुर",
+   "lat": 26.7,
+   "lon": 77.89,
+   "aliases": [
+    "dhaulpur"
+   ]
+  },
+  {
+   "name": "Didwana-Kuchaman",
+   "hi": "डीडवाना-कुचामन",
+   "lat": 27.4,
+   "lon": 74.57,
+   "aliases": [
+    "didwana",
+    "kuchaman",
+    "डीडवाना",
+    "कुचामन"
+   ]
+  },
+  {
+   "name": "Dungarpur",
+   "hi": "डूंगरपुर",
+   "lat": 23.84,
+   "lon": 73.71,
+   "aliases": []
+  },
+  {
+   "name": "Hanumangarh",
+   "hi": "हनुमानगढ़",
+   "lat": 29.58,
+   "lon": 74.33,
+   "aliases": []
+  },
+  {
+   "name": "Jaipur",
+   "hi": "जयपुर",
+   "lat": 26.91,
+   "lon": 75.79,
+   "aliases": [
+    "jpr",
+    "chomu",
+    "sanganer",
+    "mansarovar",
+    "malviya nagar",
+    "vaishali nagar",
+    "jagatpura",
+    "sitapura",
+    "pratap nagar",
+    "raja park",
+    "c-scheme",
+    "bapu nagar",
+    "jhotwara",
+    "vidhyadhar nagar",
+    "sodala",
+    "tonk road",
+    "dudu",
+    "jaipurrajasthan",
+    "जयपुर",
+    "सांगानेर",
+    "मानसरोवर"
+   ]
+  },
+  {
+   "name": "Jaisalmer",
+   "hi": "जैसलमेर",
+   "lat": 26.92,
+   "lon": 70.91,
+   "aliases": []
+  },
+  {
+   "name": "Jalore",
+   "hi": "जालोर",
+   "lat": 25.35,
+   "lon": 72.62,
+   "aliases": [
+    "jalor",
+    "जालौर"
+   ]
+  },
+  {
+   "name": "Jhalawar",
+   "hi": "झालावाड़",
+   "lat": 24.6,
+   "lon": 76.16,
+   "aliases": []
+  },
+  {
+   "name": "Jhunjhunu",
+   "hi": "झुंझुनूं",
+   "lat": 28.13,
+   "lon": 75.4,
+   "aliases": [
+    "jhunjhunun",
+    "झुंझुनू"
+   ]
+  },
+  {
+   "name": "Jodhpur",
+   "hi": "जोधपुर",
+   "lat": 26.24,
+   "lon": 73.02,
+   "aliases": []
+  },
+  {
+   "name": "Karauli",
+   "hi": "करौली",
+   "lat": 26.5,
+   "lon": 77.02,
+   "aliases": []
+  },
+  {
+   "name": "Khairthal-Tijara",
+   "hi": "खैरथल-तिजारा",
+   "lat": 27.8,
+   "lon": 76.64,
+   "aliases": [
+    "khairthal",
+    "tijara",
+    "bhiwadi",
+    "भिवाड़ी"
+   ]
+  },
+  {
+   "name": "Kota",
+   "hi": "कोटा",
+   "lat": 25.18,
+   "lon": 75.83,
+   "aliases": []
+  },
+  {
+   "name": "Kotputli-Behror",
+   "hi": "कोटपूतली-बहरोड़",
+   "lat": 27.7,
+   "lon": 76.2,
+   "aliases": [
+    "kotputli",
+    "behror",
+    "कोटपूतली"
+   ]
+  },
+  {
+   "name": "Nagaur",
+   "hi": "नागौर",
+   "lat": 27.2,
+   "lon": 73.73,
+   "aliases": []
+  },
+  {
+   "name": "Pali",
+   "hi": "पाली",
+   "lat": 25.77,
+   "lon": 73.32,
+   "aliases": [
+    "sumerpur"
+   ]
+  },
+  {
+   "name": "Phalodi",
+   "hi": "फलोदी",
+   "lat": 27.13,
+   "lon": 72.36,
+   "aliases": []
+  },
+  {
+   "name": "Pratapgarh",
+   "hi": "प्रतापगढ़",
+   "lat": 24.03,
+   "lon": 74.78,
+   "aliases": []
+  },
+  {
+   "name": "Rajsamand",
+   "hi": "राजसमंद",
+   "lat": 25.07,
+   "lon": 73.88,
+   "aliases": []
+  },
+  {
+   "name": "Salumbar",
+   "hi": "सलूम्बर",
+   "lat": 24.13,
+   "lon": 74.05,
+   "aliases": [
+    "salumber"
+   ]
+  },
+  {
+   "name": "Sawai Madhopur",
+   "hi": "सवाई माधोपुर",
+   "lat": 26.02,
+   "lon": 76.35,
+   "aliases": [
+    "s. madhopur",
+    "swm"
+   ]
+  },
+  {
+   "name": "Sikar",
+   "hi": "सीकर",
+   "lat": 27.61,
+   "lon": 75.14,
+   "aliases": []
+  },
+  {
+   "name": "Sirohi",
+   "hi": "सिरोही",
+   "lat": 24.89,
+   "lon": 72.86,
+   "aliases": [
+    "abu road",
+    "mount abu"
+   ]
+  },
+  {
+   "name": "Sri Ganganagar",
+   "hi": "श्रीगंगानगर",
+   "lat": 29.9,
+   "lon": 73.88,
+   "aliases": [
+    "ganganagar",
+    "sriganganagar",
+    "suratgarh",
+    "anupgarh",
+    "गंगानगर"
+   ]
+  },
+  {
+   "name": "Tonk",
+   "hi": "टोंक",
+   "lat": 26.17,
+   "lon": 75.79,
+   "aliases": []
+  },
+  {
+   "name": "Udaipur",
+   "hi": "उदयपुर",
+   "lat": 24.59,
+   "lon": 73.71,
+   "aliases": []
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+{
+ "_note": "Optional. Mobile number series -> telecom circle, filled from DoT's National Numbering Plan (the first 4 or 5 digits of the 10-digit number). Mobile number portability means a number can be used anywhere, so this is only a weak hint. Format: {\"<series>\": \"<circle>\"}.",
+ "series": {}
+}

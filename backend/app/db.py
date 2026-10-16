@@ -62,6 +62,28 @@ class Post(Base):
     train_label = Column(Integer, nullable=True)  # labelled training data (1 suspicious / 0 benign)
     evidence_hash = Column(String(64), default="")
 
+    # ---- police case workflow (see workflow.py)
+    status = Column(String(24), default="NEW", index=True)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    fir_number = Column(String(60), default="")
+    police_station = Column(String(120), default="")
+    case_notes = Column(Text, default="")
+    status_changed_at = Column(DateTime, nullable=True)
+    notice_sent_at = Column(DateTime, nullable=True)      # platform's removal window starts here
+    removed_at = Column(DateTime, nullable=True)
+    deadline_alerts = Column(String(20), default="")      # "warn" / "warn,overdue" once sent
+
+    # ---- complaint matching (complaints.py) — only ids/counts here, the complaint data stays encrypted
+    complaint_matches = Column(JSON, default=list)        # [{"complaint": pk, "kind": "phone"}]
+    complaint_count = Column(Integer, default=0, index=True)
+    complaint_amount = Column(Float, default=0)
+
+    # ---- prioritisation and follow-up
+    recruiter_score = Column(Float, default=0, index=True)
+    recruiter_reasons = Column(JSON, default=list)
+    repost_of = Column(Integer, nullable=True, index=True)  # case that was taken down and reappeared as this one
+    jurisdiction = Column(JSON, default=dict)
+
 
 class WatchItem(Base):
     __tablename__ = "watchlist"
@@ -146,5 +168,114 @@ class Source(Base):
     cursor = Column(String(100), default="")   # last seen remote id
 
 
+class User(Base):
+    """A police user of the command center."""
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(60), unique=True, index=True)
+    name = Column(String(120), default="")
+    designation = Column(String(80), default="")        # e.g. Sub-Inspector, SHO
+    police_station = Column(String(120), default="")
+    role = Column(String(20), default="ANALYST")         # ANALYST | IO | SUPERVISOR
+    password_hash = Column(String(100))
+    active = Column(Boolean, default=True)
+    session_version = Column(Integer, default=1)          # bump to sign the user out everywhere
+    must_change_password = Column(Boolean, default=False)
+    telegram_chat_id = Column(String(40), default="")
+    telegram_code = Column(String(12), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+
+class AuditLog(Base):
+    """Append-only, hash-chained record of who did what. SQLite triggers block UPDATE and DELETE."""
+    __tablename__ = "audit_log"
+    id = Column(Integer, primary_key=True)
+    at = Column(DateTime, default=datetime.utcnow, index=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    username = Column(String(60), default="")
+    role = Column(String(20), default="")
+    action = Column(String(60), index=True)
+    case_id = Column(Integer, nullable=True, index=True)
+    detail = Column(Text, default="")
+    ip = Column(String(64), default="")
+    prev_hash = Column(String(64), default="")
+    hash = Column(String(64), default="")
+
+
+class ComplaintImport(Base):
+    __tablename__ = "complaint_imports"
+    id = Column(Integer, primary_key=True)
+    label = Column(String(160), default="")
+    filename = Column(String(200), default="")
+    imported_by = Column(String(60), default="")
+    imported_at = Column(DateTime, default=datetime.utcnow)
+    rows = Column(Integer, default=0)
+    skipped = Column(Integer, default=0)
+    mapping = Column(JSON, default=dict)
+
+
+class Complaint(Base):
+    """One victim complaint (NCRP / 1930 export). Everything identifying is in the encrypted payload;
+    only date, amount and district stay readable for statistics."""
+    __tablename__ = "complaints"
+    id = Column(Integer, primary_key=True)
+    import_id = Column(Integer, ForeignKey("complaint_imports.id"), index=True)
+    ref_hash = Column(String(64), unique=True, index=True)   # HMAC of the complaint number (dedupe)
+    complaint_date = Column(DateTime, nullable=True)
+    amount = Column(Float, default=0)
+    district = Column(String(80), default="")
+    payload = Column(Text, default="")                      # Fernet-encrypted JSON
+
+
+class ComplaintIdent(Base):
+    """Keyed hash of each identifier in a complaint, so cases can be matched without decrypting."""
+    __tablename__ = "complaint_idents"
+    id = Column(Integer, primary_key=True)
+    complaint_id = Column(Integer, ForeignKey("complaints.id"), index=True)
+    kind = Column(String(20))
+    digest = Column(String(64), index=True)
+
+
+class EvidenceFile(Base):
+    """A file captured as evidence for a case, with its SHA-256 recorded at capture time."""
+    __tablename__ = "evidence_files"
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), index=True)
+    kind = Column(String(20))              # html | screenshot | image | text
+    path = Column(String(300))             # relative to EVIDENCE_DIR
+    sha256 = Column(String(64))
+    size = Column(Integer, default=0)
+    source_url = Column(String(500), default="")
+    captured_at = Column(DateTime, default=datetime.utcnow)
+    note = Column(String(300), default="")
+
+
+def _migrate():
+    """create_all() never adds columns to an existing table. Add any that are missing so a database
+    from an earlier version keeps working (SQLite ALTER TABLE ADD COLUMN)."""
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                ddl = col.type.compile(engine.dialect)
+                default = ""
+                if col.default is not None and getattr(col.default, "is_scalar", False):
+                    v = col.default.arg
+                    default = f" DEFAULT {int(v) if isinstance(v, bool) else repr(v) if isinstance(v, str) else v}"
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {ddl}{default}'))
+        if DATABASE_URL.startswith("sqlite"):
+            for op in ("UPDATE", "DELETE"):
+                conn.execute(text(f"CREATE TRIGGER IF NOT EXISTS audit_no_{op.lower()} BEFORE {op} ON audit_log "
+                                  "BEGIN SELECT RAISE(ABORT, 'the audit log is append-only'); END"))
+
+
 def init_db():
     Base.metadata.create_all(engine)
+    _migrate()

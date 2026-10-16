@@ -12,7 +12,8 @@ from datasketch import MinHash, MinHashLSH
 
 from .imaging import phash_distance
 
-LINK_KINDS = ("phone", "upi", "telegram", "whatsapp", "handle", "email", "crypto_wallet", "card_number", "ifsc")
+LINK_KINDS = ("phone", "upi", "telegram", "whatsapp", "handle", "email", "crypto_wallet", "card_number", "ifsc",
+              "bank_account")
 IGNORE_DOMAINS = {"facebook.com", "instagram.com", "x.com", "twitter.com", "youtube.com", "olx.in",
                   "google.com", "t.me", "wa.me", "whatsapp.com", "telegram.me"}
 

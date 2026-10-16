@@ -1,0 +1,45 @@
+>> No. {{ ref }}/PR
+>> Date: {{ today }}
+
+To,
+The Grievance Officer / Nodal Contact Person,
+[[{{ platform_short }} — name and address]]
+
+# REQUEST FOR PRESERVATION OF DATA
+
+**Subject:** Preservation of records relating to accounts advertising the sale or rent of bank accounts / cards — MuleWatch case {{ case }}{% if fir_number %}, FIR No. {{ fir_number }}{% endif %}
+
+Sir/Madam,
+
+This office is examining content on {{ platform_short }} that advertises the sale or rental of bank accounts, ATM/debit cards or banking kits, which are used as mule accounts in cyber fraud. To ensure that records needed for the investigation are not lost, you are requested to preserve, under Rule 3(1)(g) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, the following records for at least 180 days from the date of this request, or longer if this office so requests:
+
+## 1. Content and accounts concerned
+
+| No. | URL | Account / handle |
+|---|---|---|
+{% for item in targets %}| {{ loop.index }} | {{ item.url }} | {{ item.author or "—" }} |
+{% endfor %}
+
+## 2. Records to be preserved
+
+- The content at the URLs above, including deleted or edited versions, attached images and comments.
+- Registration details of the account(s): name, e-mail, mobile number, date of creation and any verification records.
+- Login and access logs: IP addresses with port numbers, timestamps (with time zone) and device identifiers, for [[period, e.g. the last 180 days]].
+- Other accounts linked to the same e-mail, mobile number, device or payment instrument.
+- Messages and payment records associated with these posts, where held by you.
+
+## 3. Identifiers in the content
+
+{% for label, value in identifiers %}- {{ label }}: {{ value }}
+{% endfor %}{% if not identifiers %}- None extracted
+{% endif %}
+
+This is a request to preserve only. A separate notice [[under Section 94 BNSS / Rule 3(1)(j) of the said Rules — officer to confirm]] will follow for disclosure of the preserved information, which under Rule 3(1)(j) is to be provided within 72 hours of a lawful order.
+
+Please acknowledge this request, quoting the reference number above.
+
+~~
+({{ officer.name }})
+{{ officer.designation }}
+{{ officer.police_station }}
+[[Official e-mail and phone]]

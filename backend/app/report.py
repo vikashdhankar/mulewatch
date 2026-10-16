@@ -12,6 +12,9 @@ from reportlab.platypus import (Image, KeepTogether, Paragraph, SimpleDocTemplat
                                 TableStyle)
 
 from .config import MEDIA_DIR
+from .masking import mask_text
+from .pdfkit import has_devanagari, hindi_ready, para_text
+from .pdfkit import style as font_style
 
 NAVY = colors.HexColor("#0f1b2d")
 RED = colors.HexColor("#c0392b")
@@ -37,7 +40,10 @@ def _highlight(text: str, matches: list[dict]) -> str:
     return "".join(out).replace("\n", "<br/>")
 
 
-def build_report(post, related_posts: list) -> bytes:
+def build_report(post, related_posts: list, complaint_line: str = "", masked: bool = False) -> bytes:
+    """masked: phone and account numbers partly hidden (for viewers below Investigating Officer)."""
+    from .workflow import STATUSES
+    mt = mask_text if masked else (lambda x: x)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm,
                             topMargin=14 * mm, bottomMargin=14 * mm,
@@ -48,9 +54,17 @@ def build_report(post, related_posts: list) -> bytes:
     body = ParagraphStyle("b", parent=ss["BodyText"], fontSize=9.5, leading=13)
     small = ParagraphStyle("s", parent=body, fontSize=8, textColor=colors.HexColor("#555555"))
     cell = ParagraphStyle("c", parent=body, fontSize=8.5, leading=11)
+    hi_body = font_style("hb", True, fontSize=9.5, leading=15) if hindi_ready() else body
+    hi_cell = font_style("hc", True, fontSize=8.5, leading=13) if hindi_ready() else cell
+
+    def P(markup, st, raw=""):
+        """Use the Devanagari font when the text has Hindi in it."""
+        if has_devanagari(raw or markup) and hindi_ready():
+            return Paragraph(para_text(markup, True), hi_body if st in (body, small) else hi_cell if st is cell else st)
+        return Paragraph(markup, st)
 
     def table(rows, widths, header=True):
-        t = Table([[Paragraph(str(c), cell) for c in r] for r in rows], colWidths=widths)
+        t = Table([[P(str(c), cell) for c in r] for r in rows], colWidths=widths)
         style = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c8ced8")),
                  ("VALIGN", (0, 0), (-1, -1), "TOP"),
                  ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]
@@ -74,9 +88,14 @@ def build_report(post, related_posts: list) -> bytes:
             ["Source URL", escape(post.url or "—"), "Coordinated ring",
              f"{post.cluster_size} linked posts" if post.cluster_size > 1 else "Not linked"],
             ["Investigator verdict", escape(post.label or "Pending review"), "Language", escape(post.language)],
-        ], [30 * mm, 60 * mm, 32 * mm, 56 * mm], header=False),
+            ["Case status", escape(STATUSES.get(post.status or "NEW", post.status or "")), "FIR number",
+             escape(post.fir_number or "—")],
+            ["Suggested district", escape((post.jurisdiction or {}).get("district") or "Not identified"),
+             "Victim complaints", escape((complaint_line or "No match in imported complaints").replace("₹", "Rs. "))],
+        ] + ([["Reappearance", f"Reappeared after takedown of MW-{post.repost_of:05d}", "", ""]] if post.repost_of else []),
+            [30 * mm, 60 * mm, 32 * mm, 56 * mm], header=False),
         Paragraph("1. Advertisement content (risk indicators highlighted)", h2),
-        Paragraph(_highlight(_pdf_safe(post.text) or "(no text - image post)", post.matches or []), body),
+        P(_highlight(mt(_pdf_safe(post.text)) or "(no text - image post)", post.matches or []), body, post.text),
     ]
 
     if post.image_path:
@@ -91,11 +110,12 @@ def build_report(post, related_posts: list) -> bytes:
             except Exception:
                 pass
         if post.ocr_text:
-            story += [Paragraph("<b>Text recovered from image (OCR):</b> " + xesc(post.ocr_text[:800]).replace("\n", " "), small)]
+            story += [P("<b>Text recovered from image (OCR):</b> " + xesc(mt(post.ocr_text[:800])).replace("\n", " "),
+                        small, post.ocr_text)]
 
     story.append(Paragraph("2. Why this was flagged", h2))
     for r in post.reasons or ["No specific indicators."]:
-        story.append(Paragraph("• " + xesc(_pdf_safe(r)), body))
+        story.append(P("• " + xesc(mt(_pdf_safe(r))), body))
 
     s = post.scores or {}
     rows = [["Component", "Score", "Detail"],
@@ -115,10 +135,11 @@ def build_report(post, related_posts: list) -> bytes:
     ent_rows = [["Type", "Value(s)"]]
     names = {"phone": "Phone", "upi": "UPI ID", "telegram": "Telegram", "whatsapp": "WhatsApp", "url": "URL",
              "email": "E-mail", "ifsc": "IFSC", "card_number": "Card number (masked)", "crypto_wallet": "Crypto wallet",
-             "price": "Price quoted", "handle": "Handle", "domains": "Domain"}
+             "price": "Price quoted", "handle": "Handle", "domains": "Domain", "bank_account": "Bank account number"}
     for k, label in names.items():
         if (post.entities or {}).get(k):
-            ent_rows.append([label, xesc(", ".join(map(str, post.entities[k])))])
+            vals = [mt(str(v)) if k in ("phone", "whatsapp", "bank_account") else str(v) for v in post.entities[k]]
+            ent_rows.append([label, xesc(", ".join(vals))])
     if len(ent_rows) == 1:
         ent_rows.append(["—", "No identifiers extracted"])
     story.append(table(ent_rows, [40 * mm, 138 * mm]))
@@ -129,7 +150,7 @@ def build_report(post, related_posts: list) -> bytes:
         rows = [["Case", "Platform", "Score", "Link reason", "Excerpt"]]
         for rp in related_posts[:20]:
             rows.append([f"MW-{rp.id:05d}", escape(rp.platform), f"{rp.risk_score:.0f}",
-                         xesc("; ".join(why.get(rp.id, []))[:120]), xesc(_pdf_safe(rp.text or rp.ocr_text or "")[:110])])
+                         xesc(mt("; ".join(why.get(rp.id, []))[:120])), xesc(mt(_pdf_safe(rp.text or rp.ocr_text or "")[:110]))])
         story.append(table(rows, [20 * mm, 22 * mm, 13 * mm, 50 * mm, 73 * mm]))
 
     story.append(KeepTogether([

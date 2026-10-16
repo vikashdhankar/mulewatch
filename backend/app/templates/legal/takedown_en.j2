@@ -1,0 +1,52 @@
+>> No. {{ ref }}/TD
+>> Date: {{ today }}
+
+To,
+The Grievance Officer / Nodal Contact Person,
+[[{{ platform_short }} — name and address as listed on the Sahyog portal]]
+
+# NOTICE UNDER SECTION 79(3)(b) OF THE INFORMATION TECHNOLOGY ACT, 2000
+
+**Subject:** Removal of / disabling access to unlawful content offering bank accounts, ATM/debit cards or banking kits for sale or rent — MuleWatch case {{ case }}{% if fir_number %}, FIR No. {{ fir_number }}{% endif %}
+
+Sir/Madam,
+
+This office has found the content listed below, hosted on {{ platform_short }}, which advertises the sale or rental of bank accounts, ATM/debit cards, UPI IDs or complete "banking kits". Accounts obtained this way are used as mule accounts to receive and move the proceeds of cyber fraud. The content is being used to commit or facilitate offences including [[applicable sections, e.g. cheating (Section 318 BNS), dishonestly receiving stolen property (Section 317 BNS), cheating by personation using a computer resource (Section 66D IT Act) — officer to confirm]].
+
+## 1. Content to be removed or disabled
+
+| No. | URL | Posted by | First observed |
+|---|---|---|---|
+{% for item in targets %}| {{ loop.index }} | {{ item.url }} | {{ item.author or "—" }} | {{ item.captured }} |
+{% endfor %}
+
+Content of item 1 as observed: "{{ excerpt }}"
+
+## 2. Identifiers advertised in the content
+
+{% for label, value in identifiers %}- {{ label }}: {{ value }}
+{% endfor %}{% if not identifiers %}- None extracted
+{% endif %}
+
+## 3. Evidence preserved by this office
+
+The content was captured at {{ captured_at }} by the MuleWatch system. SHA-256 hash values of the captured records:
+
+| File | SHA-256 |
+|---|---|
+{% for f in evidence %}| {{ f.name }} | {{ f.sha256 }} |
+{% endfor %}
+
+## 4. Action requested
+
+- Remove or disable access to the content at the URLs above, and to any copy of it on your platform, within the time limit under Rule 3(1)(d) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 as amended [[confirm the timeline in force — 3 hours under the amendment notified on 10 February 2026]].
+- Preserve the content, the account(s) that posted it and all associated records for at least 180 days, or longer if required for investigation, under Rule 3(1)(g) of the said Rules.
+- Confirm the action taken to this office through the Sahyog portal, quoting the reference number above.
+
+This notice is issued by an officer authorised under Section 79(3)(b) of the Information Technology Act, 2000 [[notification number and date of authorisation]].
+
+~~
+({{ officer.name }})
+{{ officer.designation }}
+{{ officer.police_station }}
+[[Official e-mail and phone]]

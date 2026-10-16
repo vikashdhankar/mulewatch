@@ -78,7 +78,8 @@ def test_reporting_flow():
 
     with SessionLocal() as s:
         assert s.query(Report).count() == 5
-        assert {p.source for p in s.query(Post).all()} == {"citizen"}
+        reported = {r.post_id for r in s.query(Report).all()}
+        assert {p.source for p in s.query(Post).filter(Post.id.in_(reported)).all()} == {"citizen"}
 
 
 def test_rate_limit(monkeypatch):
