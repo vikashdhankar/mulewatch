@@ -1,4 +1,5 @@
 import L from "leaflet";
+import { useT } from "../i18n";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,6 +10,7 @@ import { useLive } from "../live";
 const BOUNDS = [[23.0, 69.4], [30.3, 78.3]];      // Rajasthan
 
 export default function MapPage() {
+  const { t } = useT();
   const { version } = useLive();
   const [d, setD] = useState(null);
   const [sel, setSel] = useState(null);
@@ -51,30 +53,39 @@ export default function MapPage() {
   return (
     <div>
       <div className="page-head">
-        <h1>District map</h1>
-        <p>High and Critical cases by suggested district, from the account's IFSC branch and places named in the ad. Approximate: use it to route cases, not as proof of location.</p>
+        <h1>{t("District map")}</h1>
+        <p>{t("High and Critical cases by suggested district, from the account's IFSC branch and places named in the ad. Approximate: use it to route cases, not as proof of location.")}</p>
       </div>
       <div className="net-wrap">
-        <section className="panel map-panel"><div ref={box} className="map" role="img" aria-label="Map of Rajasthan districts with case counts" /></section>
+        <section className="panel map-panel"><div ref={box} className="map" role="img" aria-label={t("Map of Rajasthan districts with case counts")} /></section>
         <section className="panel net-side">
           {sel ? (
             <>
-              <button className="linkish small" onClick={() => setSel(null)}>All districts</button>
-              <h3>{sel.name} <span className="muted">{sel.hi}</span></h3>
-              <p className="small">{sel.cases} case{sel.cases === 1 ? "" : "s"} · {sel.critical} critical · {sel.open} open · {sel.complaints} complaint link{sel.complaints === 1 ? "" : "s"}</p>
-              <p className="small">Route to: <b>Cyber Police Station, {sel.name}</b></p>
-              {sel.top.map((t) => <Link key={t.id} to={`/case/${t.id}`} className="mini-post"><code>{caseId(t.id)}</code><span>{t.category} · {Math.round(t.risk_score)}</span></Link>)}
-              <Link className="more" to={`/cases?district=${encodeURIComponent(sel.name)}&level=Critical,High`}>All {sel.name} cases</Link>
+              <button className="linkish small" onClick={() => setSel(null)}>{t("All districts")}</button>
+              <h3>{t(sel.name)} <span className="muted">{sel.name}</span></h3>
+              <p className="small">{t("{a} cases · {b} critical · {c} open · {d} complaint links", { a: sel.cases, b: sel.critical, c: sel.open, d: sel.complaints })}</p>
+              <p className="small">{t("Route to:")} <b>{t("Cyber Police Station, {d}", { d: t(sel.name) })}</b></p>
+              {sel.top.map((x) => <Link key={x.id} to={`/case/${x.id}`} className="mini-post"><code>{caseId(x.id)}</code><span>{t(x.category)} · {Math.round(x.risk_score)}</span></Link>)}
+              <Link className="more" to={`/cases?district=${encodeURIComponent(sel.name)}&level=Critical,High`}>{t("All cases in {d}", { d: t(sel.name) })}</Link>
             </>
           ) : (
             <>
-              <h4>Districts with cases</h4>
+              <h4>{t("Districts with cases")}</h4>
               {ranked.length ? ranked.map((x) => (
                 <button key={x.name} className="dist-row" onClick={() => setSel(x)}>
-                  <span>{x.name}</span><div className="bar"><i style={{ width: `${(x.cases / ranked[0].cases) * 100}%` }} /></div><b>{x.cases}</b>
+                  <span>{t(x.name)}</span><div className="bar"><i style={{ width: `${(x.cases / ranked[0].cases) * 100}%` }} /></div><b>{x.cases}</b>
                 </button>
-              )) : <Empty title="No located cases yet">Cases get a district when the post names a place or gives an IFSC.</Empty>}
-              {d?.unplaced > 0 && <p className="muted small">{d.unplaced} High/Critical case{d.unplaced === 1 ? " has" : "s have"} no location signal.</p>}
+              )) : <Empty title={t("No located cases yet")}>{t("Cases get a district when the post names a place or gives an IFSC.")}</Empty>}
+              {d?.unplaced > 0 && <p className="muted small">{t("{n} High/Critical cases have no district signal.", { n: d.unplaced })}</p>}
+              {d?.circles?.length > 0 && (
+                <>
+                  <h4>{t("Mobile numbers by telecom circle")}</h4>
+                  {d.circles.map(([c, n]) => (
+                    <div key={c} className="dist-row static"><span>{t(c)}</span><div className="bar"><i style={{ width: `${(n / d.circles[0][1]) * 100}%` }} /></div><b>{n}</b></div>
+                  ))}
+                  <p className="muted small">{t("Where each number's series was first allotted. Ported numbers can be used anywhere, so this is a hint, not a location.")}</p>
+                </>
+              )}
             </>
           )}
         </section>

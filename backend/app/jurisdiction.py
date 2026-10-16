@@ -4,8 +4,8 @@ Signals, strongest first:
   1. IFSC branch district of an account in the post (where the account was opened)
   2. Place names in the post (district names, towns and localities, in English and Hindi, plus short
      forms seen in seller handles such as "_jpr")
-  3. Telecom circle of the mobile number series, only if refdata/phone_series.json has been filled in.
-     Ported numbers can be used anywhere, so this is only ever a weak hint.
+  3. Telecom circle where the mobile number's series was allotted (refdata/phone_series.json). Ported numbers
+     can be used anywhere, so this never picks a district; it only adds a state-level hint to the note.
 
 The result is a suggestion for routing, always labelled approximate."""
 import json
@@ -71,26 +71,36 @@ def suggest(post) -> dict:
         votes[name] += 2 * min(n, 2)
         signals.append({"kind": "place", "value": name, "detail": f"Place named in the post ({DISTRICTS[name]['hi']})",
                         "district": name, "state": "Rajasthan"})
-    if _SERIES:
-        for ph in ents.get("phone", []):
-            d = ph[-10:]
-            circle = _SERIES.get(d[:5]) or _SERIES.get(d[:4])
-            if circle:
-                signals.append({"kind": "phone", "value": ph, "detail": f"Number series of {circle} circle "
-                                                                        "(weak: ported numbers move)",
-                                "district": "", "state": circle})
+    circles = []
+    for ph in list(dict.fromkeys(ents.get("phone", []) + [w for w in ents.get("whatsapp", []) if w.startswith("+91")])):
+        d = ph[-10:]
+        circle = _SERIES.get(d[:5]) or _SERIES.get(d[:4])
+        if circle:
+            circles.append(circle)
+            signals.append({"kind": "phone", "value": ph,
+                            "detail": f"Number series first allotted in the {circle} circle (weak: numbers can be ported)",
+                            "district": "", "state": circle})
+    circle_note = ""
+    if circles:
+        outside = sorted({c for c in circles if c != "Rajasthan"})
+        if outside and len(outside) == len(set(circles)):
+            circle_note = (f" Mobile series from outside Rajasthan ({', '.join(outside)}): the seller may be operating "
+                           "from there; consider routing through I4C or that state's cyber cell.")
+        elif "Rajasthan" in circles:
+            circle_note = " Mobile series from the Rajasthan circle."
     if not votes:
         out_of_state = sorted({s["state"] for s in signals if s["kind"] == "ifsc" and not s["district"] and s["state"]})
+        note = ("Account branch outside Rajasthan: " + ", ".join(out_of_state) + ". Route through I4C / that "
+                "state's cyber cell.") if out_of_state else "No district signal in this post."
         return {"district": "", "police_station": "", "confidence": "none", "signals": signals,
-                "note": ("Account branch outside Rajasthan: " + ", ".join(out_of_state) + ". Route through I4C / that "
-                         "state's cyber cell.") if out_of_state else "No location signal in this post."}
+                "circles": sorted(set(circles)), "note": (note + circle_note).strip()}
     best, score = votes.most_common(1)[0]
     total = sum(votes.values())
     confidence = "medium" if score >= 3 and score / total >= 0.6 else "low"
     return {"district": best, "district_hi": DISTRICTS[best]["hi"],
             "police_station": f"Cyber Police Station, {best}", "confidence": confidence,
-            "votes": dict(votes), "signals": signals,
-            "note": "Approximate: based on where the account branch is and places named in the post."}
+            "votes": dict(votes), "signals": signals, "circles": sorted(set(circles)),
+            "note": "Approximate: based on where the account branch is and places named in the post." + circle_note}
 
 
 def district_points() -> list[dict]:

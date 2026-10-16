@@ -1,3 +1,5 @@
+import { tr } from "./i18n";
+
 async function req(path, opts = {}) {
   const r = await fetch(path, { credentials: "same-origin", ...opts });
   if (r.status === 401 && !path.startsWith("/api/auth/login")) {
@@ -75,10 +77,18 @@ export const api = {
   importComplaints: (token, mapping, label) => req("/api/complaints/import", json("POST", { token, mapping, label })),
   deleteImport: (id) => req(`/api/complaints/imports/${id}`, { method: "DELETE" }),
   districts: () => req("/api/districts"),
+  briefUrl: (lang, hours, district) => "/api/brief.pdf?" + qs({ lang, hours, district }),
   audit: (params = {}) => req("/api/audit?" + qs(params)),
   auditVerify: () => req("/api/audit/verify"),
   briefSchedule: () => req("/api/brief/schedule"),
   briefSend: (lang) => req("/api/brief/send", json("POST", { lang })),
+
+  // bulk link checks
+  bulkJobs: () => req("/api/bulk"),
+  bulkJob: (id) => req(`/api/bulk/${id}`),
+  bulkCreate: (text, label) => req("/api/bulk", json("POST", { text, label })),
+  bulkUpload: (file, label) => { const f = new FormData(); f.append("file", file); f.append("label", label || ""); return req("/api/bulk/upload", { method: "POST", body: f }); },
+  bulkCancel: (id) => req(`/api/bulk/${id}/cancel`, { method: "POST" }),
 
   // monitoring
   watchlist: () => req("/api/watchlist"),
@@ -104,10 +114,10 @@ export const can = (me, role) => !!me && RANK[me.role] >= RANK[role];
 export function timeAgo(iso) {
   if (!iso) return "";
   const s = Math.max(0, (Date.now() - new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime()) / 1000);
-  if (s < 45) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} d ago`;
+  if (s < 45) return tr("just now");
+  if (s < 3600) return tr("{n} min ago", { n: Math.round(s / 60) });
+  if (s < 86400) return tr("{n} h ago", { n: Math.round(s / 3600) });
+  return tr("{n} d ago", { n: Math.round(s / 86400) });
 }
 
 export function istTime(iso) {

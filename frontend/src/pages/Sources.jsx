@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT } from "../i18n";
 import { api, caseId, timeAgo } from "../api";
 import { Icon, RiskBadge } from "../components/ui";
 import { useLive } from "../live";
@@ -6,6 +7,7 @@ import { Link } from "react-router-dom";
 import { BotPanel } from "../components/ReportBot";
 
 export default function Sources() {
+  const { t } = useT();
   const { version } = useLive();
   const [data, setData] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -27,32 +29,32 @@ export default function Sources() {
   return (
     <div>
       <div className="page-head">
-        <h1>Monitored sources</h1>
-        <p>Public pages MuleWatch crawls every few seconds. New posts are scored the moment they appear.</p>
+        <h1>{t("Monitored sources")}</h1>
+        <p>{t("Public pages MuleWatch crawls every few seconds. New posts are scored the moment they appear.")}</p>
       </div>
       <section className="panel">
-        <table className="tbl">
-          <thead><tr><th>Source</th><th>Address</th><th>Status</th><th>Last crawl</th><th>Posts collected</th><th>Active</th></tr></thead>
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>{t("Source")}</th><th>{t("Address")}</th><th>{t("Status")}</th><th>{t("Last crawl")}</th><th>{t("Posts collected")}</th><th>{t("Active")}</th></tr></thead>
           <tbody>{data?.sources.map((s) => (
             <tr key={s.id}>
-              <td>{s.name}<div className="muted small">{{ forum: "Public forum", telegram: "Telegram public channel", page: "Single web page, new case when it changes" }[s.kind]}</div></td>
+              <td>{s.name}<div className="muted small">{t({ forum: "Public forum", telegram: "Telegram public channel", page: "Single web page, new case when it changes" }[s.kind] || s.kind)}</div></td>
               <td><code>{s.url}</code></td>
-              <td className={s.last_status?.startsWith("error") || s.last_status?.includes("update the forum") ? "err" : "ok-text"}>{s.last_status || "waiting"}</td>
+              <td className={s.last_status?.startsWith("error") || s.last_status?.includes("update the forum") ? "err" : "ok-text"}>{s.last_status || t("waiting")}</td>
               <td>{timeAgo(s.last_crawl)}</td>
               <td>{s.items_seen}</td>
               <td><label className="switch"><input type="checkbox" checked={s.enabled} onChange={async (e) => setData(await api.toggleSource(s.id, e.target.checked))} /><span /></label></td>
             </tr>
           ))}</tbody>
-        </table>
+        </table></div>
         <form className="src-form" onSubmit={add}>
-          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Source type">
-            <option value="forum">Forum (Charcha-compatible)</option>
-            <option value="telegram">Telegram public channel</option>
-            <option value="page">Single web page (checked every minute)</option>
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label={t("Source type")}>
+            <option value="forum">{t("Forum (Charcha-compatible)")}</option>
+            <option value="telegram">{t("Telegram public channel")}</option>
+            <option value="page">{t("Single web page (checked every minute)")}</option>
           </select>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={{ forum: "http://103.155.85.18:8100", telegram: "t.me/channelname", page: "https://… link to an ad, profile or listing" }[kind]} required />
-          <button className="btn"><Icon name="plus" /> Add source</button>
-          <button type="button" className="btn" onClick={async () => { const r = await api.crawl(); setMsg(`Crawled now: ${r.new} new post(s).`); load(); }}><Icon name="refresh" /> Crawl now</button>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={{ forum: "http://103.155.85.18:8100", telegram: "t.me/channelname", page: t("https://… link to an ad, profile or listing") }[kind]} required />
+          <button className="btn"><Icon name="plus" /> {t("Add source")}</button>
+          <button type="button" className="btn" onClick={async () => { const r = await api.crawl(); setMsg(t("Crawled now: {n} new posts.", { n: r.new })); load(); }}><Icon name="refresh" /> {t("Crawl now")}</button>
         </form>
         {msg && <p className="note">{msg}</p>}
       </section>
@@ -60,23 +62,23 @@ export default function Sources() {
       <BotPanel />
       <div className="two-col">
         <section className="panel">
-          <div className="panel-head"><h2>Alert log</h2><span className="muted small">{sys?.telegram_alerts ? "Telegram push is on" : "Telegram push off (see Phone alerts above)"}</span></div>
+          <div className="panel-head"><h2>{t("Alert log")}</h2><span className="muted small">{sys?.telegram_alerts ? t("Telegram push is on") : t("Telegram push off (see Phone alerts above)")}</span></div>
           {alerts.length ? alerts.slice(0, 25).map((a) => (
             <Link key={a.id} to={`/case/${a.post_id}`} className="alert-row">
               <RiskBadge level={a.level} />
-              <div><strong>{caseId(a.post_id)}</strong> <span className="muted small">{timeAgo(a.created_at)}{a.channel === "telegram" && (a.delivered ? " · sent to Telegram" : " · Telegram pending")}</span>
+              <div><strong>{caseId(a.post_id)}</strong> <span className="muted small">{timeAgo(a.created_at)}{a.channel === "telegram" && (a.delivered ? ` · ${t("sent to Telegram")}` : ` · ${t("Telegram pending")}`)}</span>
                 <div className="small">{a.reason}</div></div>
             </Link>
-          )) : <p className="muted">No alerts yet.</p>}
+          )) : <p className="muted">{t("No alerts yet.")}</p>}
         </section>
         <section className="panel">
-          <div className="panel-head"><h2>Detection engine</h2></div>
+          <div className="panel-head"><h2>{t("Detection engine")}</h2></div>
           <dl className="sys">
-            <dt>Image text reading (OCR)</dt><dd className={sys?.ocr ? "ok-text" : "err"}>{sys?.ocr ? "Tesseract ready" : "Tesseract not installed"}</dd>
-            <dt>Text model</dt><dd>Character n-gram classifier, trained on {sys ? sys.model_docs[0] + sys.model_docs[1] : "–"} labelled examples, retrains on every verdict</dd>
-            <dt>AI analyst</dt><dd>{sys?.llm ? "Claude second opinion on manual checks" : "Off (optional, set ANTHROPIC_API_KEY)"}</dd>
-            <dt>Telegram alerts</dt><dd>{sys?.telegram_alerts ? "On" : "Off"}</dd>
-            <dt>Crawler</dt><dd>{sys?.crawler?.running ? "Running" : "Stopped"}{sys?.crawler?.errors ? `, ${sys.crawler.errors} errors so far` : ""}</dd>
+            <dt>{t("Image text reading (OCR)")}</dt><dd className={sys?.ocr ? "ok-text" : "err"}>{sys?.ocr ? t("Tesseract ready") : t("Tesseract not installed")}</dd>
+            <dt>{t("Text model")}</dt><dd>{t("Character n-gram classifier, trained on {n} labelled examples, retrains on every verdict", { n: sys ? sys.model_docs[0] + sys.model_docs[1] : "–" })}</dd>
+            <dt>{t("AI analyst")}</dt><dd>{sys?.llm ? t("Claude second opinion on manual checks") : t("Off (optional, set ANTHROPIC_API_KEY)")}</dd>
+            <dt>{t("Telegram alerts")}</dt><dd>{sys?.telegram_alerts ? t("On") : t("Off")}</dd>
+            <dt>{t("Crawler")}</dt><dd>{sys?.crawler?.running ? t("Running") : t("Stopped")}{sys?.crawler?.errors ? `, ${t("{n} errors so far", { n: sys.crawler.errors })}` : ""}</dd>
           </dl>
         </section>
       </div>

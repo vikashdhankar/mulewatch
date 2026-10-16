@@ -251,6 +251,31 @@ class EvidenceFile(Base):
     note = Column(String(300), default="")
 
 
+class BulkJob(Base):
+    """A list of links an officer collected, checked one by one in the background."""
+    __tablename__ = "bulk_jobs"
+    id = Column(Integer, primary_key=True)
+    label = Column(String(160), default="")
+    created_by = Column(String(60), default="")
+    created_by_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String(16), default="queued")      # queued | running | done | cancelled
+    total = Column(Integer, default=0)
+
+
+class BulkItem(Base):
+    __tablename__ = "bulk_items"
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("bulk_jobs.id"), index=True)
+    url = Column(String(500))
+    note = Column(String(300), default="")             # text next to the link in the officer's file
+    status = Column(String(16), default="queued")      # queued | done | existing | error | cancelled
+    post_id = Column(Integer, nullable=True)
+    error = Column(String(300), default="")
+    checked_at = Column(DateTime, nullable=True)
+
+
 def _migrate():
     """create_all() never adds columns to an existing table. Add any that are missing so a database
     from an earlier version keeps working (SQLite ALTER TABLE ADD COLUMN)."""

@@ -143,11 +143,14 @@ forum and the case moves to *Content removed*.
 
 **Suggested jurisdiction** names a district and its cyber police station, from the IFSC branch district and places
 named in the ad (district names, towns, localities, Hindi names, and short forms in handles such as `_jpr`). It is
-always approximate. A telecom-circle hint from mobile number series can be added by filling
-`backend/app/refdata/phone_series.json` from DoT's numbering plan; ported numbers make it a weak signal.
+always approximate. Each mobile number also gets the **telecom circle** its series was first allotted to
+(`backend/app/refdata/phone_series.json`, about 2,000 four-digit series). A number from outside the Rajasthan
+circle suggests routing through I4C or that state's cyber cell. Ported numbers make this a weak signal, so it is
+shown as a hint and never decides the district.
 
 **District map** shows High/Critical cases per Rajasthan district (41 districts after the December 2024
-reorganisation). The map tiles need internet; the district list works offline.
+reorganisation), and how many case mobile numbers come from each telecom circle. The map tiles need internet; the
+district list works offline.
 
 ---
 
@@ -184,6 +187,8 @@ or delete audit entries.
 **Daily brief** (supervisors): one page in English or Hindi with new and critical cases, cases linked to complaints
 and the amount, active rings, notices sent, content removed, overdue takedowns, reappearances, each platform's
 removal times, the top open cases by recruiter priority, the most-seen identifiers and cases by district.
+Choose a district to get a brief for that district's cases only (for an SHO or district SP); the scheduled brief
+covers all districts.
 
 It is sent automatically at `DAILY_BRIEF_TIME` (IST, default 09:00) through the Telegram bot to every supervisor
 who has linked Telegram. To link: **your name → My account → Link Telegram**, then send `/officer <code>` to
@@ -191,7 +196,24 @@ the bot. Officers who link Telegram also get takedown-clock alerts for cases ass
 
 ---
 
-## 11. Settings (`.env`)
+## 11. Bulk link check and Hindi
+
+**Bulk link check** (any officer): paste links collected from complaints, patrolling, tips or other units, one per
+line, or upload a TXT, CSV or Excel file. Words on the same line as a link (a complaint number, where it was found)
+are kept as the officer's note and shown in the case. Links are opened one at a time in the background, exactly as
+**Check a post** does; links that are already cases are reported as such instead of being added again. The list
+page shows progress and the High/Critical results, and when the list is done one Telegram summary goes to the
+unit's alert chat and to the officer who started it. Any officer can stop their own list; IOs and supervisors can
+stop any list.
+
+**Hindi**: the **EN / हिं** switch in the top bar (and on the sign-in page) changes every screen to Hindi; the choice
+is remembered in that browser. Legal drafts and the daily brief have their own language choice. Reasons and notes
+that the detection engine writes for each case stay in English. Translations live in
+`frontend/scripts/hi_source.py`; edit there and run it to regenerate `frontend/src/hi.json`, then rebuild.
+
+---
+
+## 12. Settings (`.env`)
 
 | Setting | Default | |
 |---|---|---|
@@ -201,4 +223,5 @@ the bot. Officers who link Telegram also get takedown-clock alerts for cases ass
 | `TAKEDOWN_WINDOW_HOURS` / `TAKEDOWN_WARN_MINUTES` | `3` / `30` | Removal window and early warning |
 | `DAILY_BRIEF_TIME` / `DAILY_BRIEF_LANG` / `DAILY_BRIEF_TELEGRAM` | `09:00` / `en` / `1` | Daily brief schedule |
 | `MW_SCREENSHOTS` | `1` | Full-page screenshots when Playwright is installed |
+| `BULK_MAX_LINKS` / `BULK_PAUSE_SECONDS` | `500` / `1.5` | Links per bulk list, and the pause between links |
 | `MW_SECRET` / `MW_DATA_KEY` | generated | Session signing key and complaint encryption key (otherwise in `backend/data/keys/`) |

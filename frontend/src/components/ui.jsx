@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { caseId, inr, STATUS, timeAgo } from "../api";
+import { useT } from "../i18n";
 
 export function Icon({ name, size = 18 }) {
   const p = {
@@ -30,6 +31,7 @@ export function Icon({ name, size = 18 }) {
     bank: <><path d="M3 10l9-6 9 6" /><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" /></>,
     pin: <><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></>,
     download: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></>,
+    list: <><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1.2" /><circle cx="4.5" cy="12" r="1.2" /><circle cx="4.5" cy="18" r="1.2" /></>,
     repeat: <><path d="M17 3l3 3-3 3" /><path d="M4 11V9a3 3 0 013-3h13" /><path d="M7 21l-3-3 3-3" /><path d="M20 13v2a3 3 0 01-3 3H4" /></>,
   }[name];
   return (
@@ -39,15 +41,17 @@ export function Icon({ name, size = 18 }) {
 }
 
 export function RiskBadge({ level, score }) {
+  const { t } = useT();
   return (
     <span className={`risk risk-${level?.toLowerCase()}`}>
       {score != null && <b>{Math.round(score)}</b>}
-      {level}
+      {t(level)}
     </span>
   );
 }
 
 export function ScoreMeter({ score, level, size = 120 }) {
+  const { t } = useT();
   const r = 52, c = 2 * Math.PI * r, frac = Math.min(1, (score || 0) / 100);
   return (
     <div className={`meter meter-${level?.toLowerCase()}`} style={{ width: size, height: size }}>
@@ -55,7 +59,7 @@ export function ScoreMeter({ score, level, size = 120 }) {
         <circle cx="60" cy="60" r={r} className="meter-track" />
         <circle cx="60" cy="60" r={r} className="meter-val" strokeDasharray={`${c * frac} ${c}`} transform="rotate(-90 60 60)" />
       </svg>
-      <div className="meter-num"><strong>{Math.round(score)}</strong><span>{level}</span></div>
+      <div className="meter-num"><strong>{Math.round(score)}</strong><span>{t(level)}</span></div>
     </div>
   );
 }
@@ -75,7 +79,8 @@ export { GROUP_CLASS, GROUP_LABEL };
 
 /** Renders text with keyword + identifier spans highlighted. */
 export function HighlightedText({ text, matches = [], entitySpans = [] }) {
-  if (!text) return <p className="muted">No text — image-only post.</p>;
+  const { t } = useT();
+  if (!text) return <p className="muted">{t("No text — image-only post.")}</p>;
   // backend offsets are Unicode code points; split the same way so emoji don't shift highlights
   const chars = Array.from(text);
   const cls = new Array(chars.length).fill(null);
@@ -85,7 +90,7 @@ export function HighlightedText({ text, matches = [], entitySpans = [] }) {
       if (!cls[i] || PRIORITY[c] > PRIORITY[cls[i]]) { cls[i] = c; tip[i] = t; }
     }
   };
-  matches.filter((m) => m.source === "text").forEach((m) => paint(m.start, m.end, GROUP_CLASS[m.group] || "hl-soft", GROUP_LABEL[m.group]));
+  matches.filter((m) => m.source === "text").forEach((m) => paint(m.start, m.end, GROUP_CLASS[m.group] || "hl-soft", t(GROUP_LABEL[m.group] || "")));
   entitySpans.forEach((s) => paint(s.start, s.end, "hl-ent", s.kind.replace("_", " ")));
   const out = [];
   let i = 0;
@@ -100,13 +105,14 @@ export function HighlightedText({ text, matches = [], entitySpans = [] }) {
 }
 
 export function Legend() {
+  const { t } = useT();
   return (
     <div className="legend">
-      <span><mark className="hl-strong">sale language</mark></span>
-      <span><mark className="hl-warn">evasion cue</mark></span>
-      <span><mark className="hl-ent">identifier</mark></span>
-      <span><mark className="hl-soft">context word</mark></span>
-      <span><mark className="hl-good">awareness</mark></span>
+      <span><mark className="hl-strong">{t("sale language")}</mark></span>
+      <span><mark className="hl-warn">{t("evasion cue")}</mark></span>
+      <span><mark className="hl-ent">{t("identifier")}</mark></span>
+      <span><mark className="hl-soft">{t("context word")}</mark></span>
+      <span><mark className="hl-good">{t("awareness")}</mark></span>
     </div>
   );
 }
@@ -119,20 +125,21 @@ const ENT_LABEL = {
 const WATCHABLE = new Set(["phone", "upi", "telegram", "whatsapp", "handle", "email", "crypto_wallet", "url", "domains"]);
 
 export function Entities({ entities = {}, onWatch, watched = new Set() }) {
+  const { t } = useT();
   const rows = Object.entries(entities).filter(([k, v]) => ENT_LABEL[k] && v?.length);
-  if (!rows.length) return <p className="muted">No phone numbers, payment IDs or links found.</p>;
+  if (!rows.length) return <p className="muted">{t("No phone numbers, payment IDs or links found.")}</p>;
   return (
     <dl className="ents">
       {rows.map(([k, vals]) => (
         <div key={k} className="ent-row">
-          <dt>{ENT_LABEL[k]}</dt>
+          <dt>{t(ENT_LABEL[k])}</dt>
           <dd>{vals.map((v) => (
             <span key={v} className="ent">
               <code>{v}</code>
               {onWatch && WATCHABLE.has(k) && !String(v).includes("•") && (
                 watched.has(String(v).toLowerCase())
-                  ? <span className="ent-watched" title="On watchlist"><Icon name="eye" size={14} /></span>
-                  : <button className="ent-watch" title="Add to watchlist" onClick={() => onWatch(k === "domains" ? "url" : k, v)}><Icon name="plus" size={14} /></button>
+                  ? <span className="ent-watched" title={t("On watchlist")}><Icon name="eye" size={14} /></span>
+                  : <button className="ent-watch" title={t("Add to watchlist")} onClick={() => onWatch(k === "domains" ? "url" : k, v)}><Icon name="plus" size={14} /></button>
               )}
             </span>
           ))}</dd>
@@ -143,12 +150,13 @@ export function Entities({ entities = {}, onWatch, watched = new Set() }) {
 }
 
 export function ScoreBreakdown({ scores = {}, llm }) {
+  const { t } = useT();
   const rows = [
-    ["Keyword & identifier rules", scores.rule, (scores.rule_parts || []).map((p) => `${p.name} (+${p.points})`).join(" · ")],
-    ["Multilingual text model", scores.ml, scores.ml_features?.length ? `strongest signals: ${scores.ml_features.join(", ")}` : ""],
-    ["Image analysis", scores.image, scores.image_cues?.length ? `seen in image: ${scores.image_cues.join(", ")}` : "no banking material in image"],
+    [t("Keyword & identifier rules"), scores.rule, (scores.rule_parts || []).map((p) => `${p.name} (+${p.points})`).join(" · ")],
+    [t("Multilingual text model"), scores.ml, scores.ml_features?.length ? t("strongest signals: {s}", { s: scores.ml_features.join(", ") }) : ""],
+    [t("Image analysis"), scores.image, scores.image_cues?.length ? t("seen in image: {s}", { s: scores.image_cues.join(", ") }) : t("no banking material in image")],
   ];
-  if (scores.llm != null) rows.push(["AI analyst (Claude)", scores.llm, llm?.rationale || ""]);
+  if (scores.llm != null) rows.push([t("AI analyst (Claude)"), scores.llm, llm?.rationale || ""]);
   return (
     <div className="breakdown">
       {rows.map(([name, v, note]) => (
@@ -159,34 +167,37 @@ export function ScoreBreakdown({ scores = {}, llm }) {
         </div>
       ))}
       <div className="bd-extra">
-        <span>Combined base score <b>{Math.round(scores.base || 0)}</b></span>
-        {scores.ring_boost > 0 && <span>Seller-ring boost <b>+{scores.ring_boost}</b></span>}
-        {scores.watchlist?.length > 0 && <span className="wl-hit">Watchlist match: {scores.watchlist.join(", ")}</span>}
+        <span>{t("Combined base score")} <b>{Math.round(scores.base || 0)}</b></span>
+        {scores.ring_boost > 0 && <span>{t("Seller-ring boost")} <b>+{scores.ring_boost}</b></span>}
+        {scores.watchlist?.length > 0 && <span className="wl-hit">{t("Watchlist match")}: {scores.watchlist.join(", ")}</span>}
+        {scores.complaints && <span className="wl-hit">{scores.complaints}</span>}
+        {scores.repost && <span className="wl-hit">{scores.repost}</span>}
       </div>
     </div>
   );
 }
 
 export function PostRow({ p, fresh, why }) {
+  const { t } = useT();
   return (
     <Link to={`/case/${p.id}`} className={`post-row${fresh ? " fresh" : ""} lvl-${p.risk_level.toLowerCase()}`}>
       <RiskBadge level={p.risk_level} score={p.risk_score} />
       <div className="pr-main">
         <div className="pr-top">
           <span className="pr-case">{caseId(p.id)}</span>
-          <span className="pr-cat">{p.category}</span>
-          {p.platform?.endsWith("· comment") && <span className="chip chip-cmt">comment</span>}
-          {p.reports > 0 && <span className="chip chip-cit">reported by {p.reports} {p.reports === 1 ? "citizen" : "citizens"}</span>}
-          {p.cluster_size > 1 && <span className="chip chip-ring">ring of {p.cluster_size}</span>}
-          {p.label === "confirmed" && <span className="chip chip-ok">confirmed</span>}
-          {p.label === "false_positive" && <span className="chip">false positive</span>}
+          <span className="pr-cat">{t(p.category)}</span>
+          {p.platform?.endsWith("· comment") && <span className="chip chip-cmt">{t("comment")}</span>}
+          {p.reports > 0 && <span className="chip chip-cit">{t(p.reports === 1 ? "reported by {n} citizen" : "reported by {n} citizens", { n: p.reports })}</span>}
+          {p.cluster_size > 1 && <span className="chip chip-ring">{t("ring of {n}", { n: p.cluster_size })}</span>}
+          {p.label === "confirmed" && <span className="chip chip-ok">{t("confirmed")}</span>}
+          {p.label === "false_positive" && <span className="chip">{t("false positive")}</span>}
           {p.status && p.status !== "NEW" && <StatusChip status={p.status} />}
-          {p.complaint_count > 0 && <span className="chip chip-comp" title={`${inr(p.complaint_amount)} reported lost`}>{p.complaint_count} complaint{p.complaint_count === 1 ? "" : "s"}</span>}
-          {p.repost_of && <span className="chip chip-td">back after takedown</span>}
-          {p.recruiter_score >= 40 && <span className="chip chip-rec" title="Recruiter priority">recruiter {Math.round(p.recruiter_score)}</span>}
-          {p.district && <span className="chip chip-dist">{p.district}</span>}
+          {p.complaint_count > 0 && <span className="chip chip-comp" title={t("{amount} reported lost", { amount: inr(p.complaint_amount) })}>{t(p.complaint_count === 1 ? "{n} complaint" : "{n} complaints", { n: p.complaint_count })}</span>}
+          {p.repost_of && <span className="chip chip-td">{t("back after takedown")}</span>}
+          {p.recruiter_score >= 40 && <span className="chip chip-rec" title={t("Recruiter priority")}>{t("recruiter {n}", { n: Math.round(p.recruiter_score) })}</span>}
+          {p.district && <span className="chip chip-dist">{t(p.district)}</span>}
         </div>
-        <div className="pr-excerpt">{p.excerpt || "(image only)"}</div>
+        <div className="pr-excerpt">{p.excerpt || t("(image only)")}</div>
         {why ? <div className="pr-why">{why.join("; ")}</div> :
           <div className="pr-meta">{p.platform} · {p.author && `u/${p.author} · `}{timeAgo(p.posted_at)}</div>}
       </div>
@@ -196,14 +207,16 @@ export function PostRow({ p, fresh, why }) {
 }
 
 export function StatusChip({ status }) {
-  return <span className={`chip st st-${status.toLowerCase()}`}>{STATUS[status] || status}</span>;
+  const { t } = useT();
+  return <span className={`chip st st-${status.toLowerCase()}`}>{t(STATUS[status] || status)}</span>;
 }
 
 export function Modal({ title, onClose, children, wide }) {
+  const { t } = useT();
   return (
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
+        <div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label={t("Close")}><Icon name="x" /></button></div>
         {children}
       </div>
     </div>

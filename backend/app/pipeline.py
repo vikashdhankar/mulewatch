@@ -99,6 +99,7 @@ def recompute_all(session, alert: bool = True, push: bool = True):
     if not posts:
         return
     coord = compute_coordination(posts)
+    fresh = {}
     clusters = defaultdict(list)
     for p in posts:
         root = coord[p.id]["cluster"]
@@ -143,7 +144,9 @@ def recompute_all(session, alert: bool = True, push: bool = True):
                         ring_platforms=platforms, complaints=complaints.describe(p),
                         repost=(f"Reappeared after takedown of MW-{p.repost_of:05d}" if p.repost_of else ""))
         if alert:
-            maybe_alert(session, p, hits, previous_level=prev, push_allowed=push)
+            a = maybe_alert(session, p, hits, previous_level=prev, push_allowed=push)
+            if a is not None:
+                fresh[p.id] = a
 
     scores = recruiter.compute(posts)
     for p in posts:
@@ -152,6 +155,9 @@ def recompute_all(session, alert: bool = True, push: bool = True):
     if alert:
         for p in posts:
             if p.id in gained and p.source != "preview":
+                if p.id in fresh:            # already alerted in this pass: one alert, with the complaint link as its reason
+                    fresh[p.id].reason = (complaints.describe(p) + ". Open the case to see the complaints.")[:300]
+                    continue
                 notify(session, p, complaints.describe(p) + ". Open the case to see the complaints.", push=push)
         for p in reappeared:
             why = next((r["why"] for r in p.related or [] if r["id"] == p.repost_of), [])

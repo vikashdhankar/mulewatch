@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image as PILImage
 from sqlalchemy import func
 
-from . import audit, auth, crawler, evidence, llm, masking, police_api, reportbot, workflow
+from . import audit, auth, bulk, crawler, evidence, llm, masking, police_api, reportbot, workflow
 from .alerts import telegram_enabled
 from .auth import can, current_user, ip_of, require
 from .config import LEVEL_RANK, MEDIA_DIR, ROOT_DIR
@@ -47,6 +47,7 @@ def startup():
     crawler.start()
     reportbot.start()
     workflow.start()
+    bulk.start()            # carries on with any list left unfinished when the app stopped
 
 
 # ----------------------------------------------------------------------------- serializers

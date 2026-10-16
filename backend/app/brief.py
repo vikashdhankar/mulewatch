@@ -59,8 +59,10 @@ def _ist(dt):
     return dt + timedelta(hours=5, minutes=30)
 
 
-def collect(session, start: datetime, end: datetime) -> dict:
+def collect(session, start: datetime, end: datetime, district: str | None = None) -> dict:
     posts = session.query(Post).filter(Post.source != "preview").all()
+    if district:              # one district's brief: cases whose suggested district is this one
+        posts = [p for p in posts if (p.jurisdiction or {}).get("district") == district]
     period = [p for p in posts if p.ingested_at and start <= p.ingested_at < end]
     flagged = [p for p in period if LEVEL_RANK.get(p.risk_level, 0) >= 2]
     rings = {p.cluster_id for p in period if p.cluster_id is not None and LEVEL_RANK.get(p.risk_level, 0) >= 2}
@@ -109,7 +111,8 @@ def _mins(m) -> str:
     return f"{m} min" if m < 120 else f"{m / 60:.1f} h"
 
 
-def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int = 24) -> bytes:
+def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int = 24,
+              district: str | None = None) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -118,7 +121,7 @@ def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int
     lang = "hi" if lang == "hi" and hindi_ready() else "en"
     L, hi = T[lang], lang == "hi"
     end = end or datetime.utcnow()
-    d = collect(session, end - timedelta(hours=hours), end)
+    d = collect(session, end - timedelta(hours=hours), end, district)
     s_title = style("t", hi, fontSize=15, leading=20, bold=True, textColor=colors.HexColor("#14213d"))
     s_sub = style("s", hi, fontSize=9, leading=13, textColor=colors.HexColor("#555555"))
     s_h = style("h", hi, fontSize=10.5, leading=15, bold=True, spaceBefore=7, spaceAfter=3, textColor=colors.HexColor("#14213d"))
@@ -142,7 +145,11 @@ def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int
         return t
 
     a, b = _ist(d["start"]), _ist(d["end"])
-    story = [P(L["title"], s_title),
+    title = L["title"]
+    if district:
+        from .jurisdiction import DISTRICTS
+        title += f" — {DISTRICTS[district]['hi'] if hi and district in DISTRICTS else district}"
+    story = [P(title, s_title),
              P(f"{L['period']}: {a.strftime('%d %b %Y %H:%M')} {L['to']} {b.strftime('%d %b %Y %H:%M')} IST"
                + (" तक" if hi else ""), s_sub),
              Spacer(1, 6)]

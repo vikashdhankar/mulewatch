@@ -3,13 +3,14 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider, useAuth } from "./auth";
+import { LangProvider } from "./i18n";
 import { LiveProvider } from "./live";
 import Login from "./pages/Login";
 import "./styles.css";
 
 function Gate() {
   const { me } = useAuth();
-  if (me === undefined) return <div className="boot">Loading MuleWatch…</div>;
+  if (me === undefined) return <div className="boot">MuleWatch…</div>;
   if (!me) return <Login />;
   return <LiveProvider key={me.id}><App /></LiveProvider>;
 }
@@ -17,9 +18,11 @@ function Gate() {
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <Gate />
-      </AuthProvider>
+      <LangProvider>
+        <AuthProvider>
+          <Gate />
+        </AuthProvider>
+      </LangProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

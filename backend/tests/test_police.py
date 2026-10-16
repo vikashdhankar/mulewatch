@@ -250,3 +250,74 @@ def test_recruiter_ranks_bulk_recruiter_above_single_seller():
 
 def io_bytes(b: bytes):
     return io.BytesIO(b)
+
+
+# ----------------------------------------------------------------------------- tier 2/3 additions
+
+def test_phone_circle_hint():
+    sug = jurisdiction.suggest(Post(text="Account kit milega", entities={"phone": ["+919829041736"]}))
+    assert "Rajasthan" in sug["circles"]
+    assert "Rajasthan circle" in sug["note"]
+    other = jurisdiction.suggest(Post(text="call now", entities={"phone": ["+919810012345"]}))
+    assert "Rajasthan" not in other["circles"] and other["circles"]
+    assert "outside Rajasthan" in other["note"]
+
+
+def test_brief_by_district():
+    sho = client("sho")
+    r = sho.get("/api/brief.pdf", params={"lang": "hi", "district": "Jaipur"})
+    assert r.status_code == 200 and r.content[:4] == b"%PDF"
+    assert sho.get("/api/brief.pdf", params={"district": "Atlantis"}).status_code == 400
+
+
+def test_bulk_link_extraction():
+    from app import bulk
+    links = bulk.extract_links("https://t.me/kitwala/12  complaint 3120926\nwww.example.com/ad, and t.me/kitwala/12\nno link here")
+    assert links[0] == ("https://t.me/kitwala/12", "complaint 3120926")
+    assert links[1][0] == "https://www.example.com/ad"
+    assert len(links) == 2                                   # duplicates dropped
+    csv = "url,note\nhttps://olx.test/item/9,from patrol\n".encode()
+    assert bulk.links_from_file("x.csv", csv)[0][0] == "https://olx.test/item/9"
+
+
+def test_bulk_job_runs_and_makes_cases(monkeypatch):
+    import time as _t
+    from app import bulk, fetcher
+
+    def fake_fetch(url):
+        if "dead" in url:
+            raise fetcher.FetchError("Page not found (404)")
+        return {"url": url, "final_url": url, "platform": "Web", "author": "", "title": "", "posted_at": "",
+                "text": KIT_AD if "kit" in url else "Fresh mangoes for sale in Jaipur, call today",
+                "image_paths": [], "how": "test", "note": "", "html": ""}
+
+    monkeypatch.setattr(fetcher, "fetch_url", fake_fetch)
+    monkeypatch.setattr(bulk, "PAUSE", 0)
+    analyst = client("analyst")
+    r = analyst.post("/api/bulk", json={"text": "https://bulk.test/kit-ad  NCRP 999\nhttps://bulk.test/mango\nhttps://bulk.test/dead",
+                                         "label": "test list"})
+    assert r.status_code == 200, r.text
+    jid = r.json()["id"]
+    for _ in range(120):
+        j = analyst.get(f"/api/bulk/{jid}").json()
+        if j["status"] == "done":
+            break
+        _t.sleep(0.25)
+    assert j["status"] == "done", j
+    by = {i["url"]: i for i in j["items"]}
+    assert by["https://bulk.test/dead"]["status"] == "error"
+    kit = by["https://bulk.test/kit-ad"]
+    assert kit["status"] == "done" and kit["post"]["risk_level"] in ("High", "Critical")
+    assert "XXXX" in kit["post"]["excerpt"] or "41736" not in kit["post"]["excerpt"]   # masked for analysts
+    with SessionLocal() as s:
+        p = s.get(Post, kit["post"]["id"])
+        assert p.source == "bulk" and any("NCRP 999" in x for x in p.reasons)
+    # the same link again is reported as an existing case, not a duplicate
+    r2 = analyst.post("/api/bulk", json={"text": "https://bulk.test/kit-ad"}).json()
+    for _ in range(80):
+        j2 = analyst.get(f"/api/bulk/{r2['id']}").json()
+        if j2["status"] == "done":
+            break
+        _t.sleep(0.25)
+    assert j2["items"][0]["status"] == "existing"
+    assert analyst.post("/api/bulk", json={"text": "nothing here"}).status_code == 400

@@ -25,6 +25,15 @@ def _post(s, pid: int) -> Post:
     return p
 
 
+def _juris_for(p: Post, u) -> dict:
+    j = dict(p.jurisdiction or {})
+    if not can(u, "IO"):
+        from .masking import mask_text
+        j["signals"] = [dict(x, value=mask_text(x["value"])) if x.get("kind") == "phone" else x
+                        for x in j.get("signals", [])]
+    return j
+
+
 def case_info(s, p: Post, u) -> dict:
     """Everything the police side of the case page needs."""
     users = {x.id: x for x in s.query(User).all()}
@@ -40,7 +49,7 @@ def case_info(s, p: Post, u) -> dict:
         "recruiter_score": p.recruiter_score or 0, "recruiter_reasons": p.recruiter_reasons or [],
         "repost_of": p.repost_of,
         "complaints": {"count": p.complaint_count or 0, "amount": p.complaint_amount or 0, "items": None},
-        "jurisdiction": p.jurisdiction or {},
+        "jurisdiction": _juris_for(p, u),
         "banks": banks.routes(p) if can(u, "IO") else [],
         "evidence": evidence.verify(s, p.id),
         "screenshots": evidence.status(),
@@ -267,7 +276,8 @@ def districts(u=Depends(current_user)):
                          "top": [{"id": p.id, "category": p.category, "risk_score": p.risk_score}
                                  for p in sorted(ps, key=lambda x: -x.risk_score)[:4]]})
     unplaced = sum(1 for p in posts if LEVEL_RANK.get(p.risk_level, 0) >= 2 and not (p.jurisdiction or {}).get("district"))
-    return {"districts": out, "unplaced": unplaced}
+    circles = Counter(c for p in posts if LEVEL_RANK.get(p.risk_level, 0) >= 2 for c in (p.jurisdiction or {}).get("circles", []))
+    return {"districts": out, "unplaced": unplaced, "circles": circles.most_common()}
 
 
 # ----------------------------------------------------------------------------- audit
@@ -312,10 +322,12 @@ def audit_csv(request: Request, u=Depends(require("SUPERVISOR"))):
 
 @router.get("/brief.pdf")
 def brief_pdf(request: Request, lang: str = "en", hours: int = Query(24, ge=1, le=24 * 31),
-              u=Depends(require("SUPERVISOR"))):
+              district: str | None = None, u=Depends(require("SUPERVISOR"))):
+    if district and district not in jurisdiction.DISTRICTS:
+        raise HTTPException(400, "Unknown district")
     with SessionLocal() as s:
-        pdf = brief.build_pdf(s, lang, hours=hours)
-    audit.log(u, "brief.generated", detail={"lang": lang, "hours": hours}, ip=ip_of(request))
+        pdf = brief.build_pdf(s, lang, hours=hours, district=district or None)
+    audit.log(u, "brief.generated", detail={"lang": lang, "hours": hours, "district": district}, ip=ip_of(request))
     name = f"MuleWatch-brief-{datetime.now().strftime('%Y-%m-%d')}-{lang}.pdf"
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{name}"'})
 
@@ -332,3 +344,68 @@ def brief_schedule(u=Depends(require("SUPERVISOR"))):
         chats = len(officer_chats(s, roles=("SUPERVISOR",)))
     return {"time": brief.BRIEF_TIME, "lang": brief.BRIEF_LANG, "enabled": brief.BRIEF_ON,
             "bot": bool(alert_token()), "supervisor_chats": chats}
+
+
+# ----------------------------------------------------------------------------- bulk link checks
+
+def _bulk_out(s, job, u, with_items=False):
+    from . import bulk
+    from .masking import mask_text
+    out = bulk.summary(s, job)
+    if with_items:
+        out["items"] = bulk.items(s, job.id)
+        if not can(u, "IO"):
+            for it in out["items"]:
+                if it["post"]:
+                    it["post"]["excerpt"] = mask_text(it["post"]["excerpt"])
+                it["note"] = mask_text(it["note"])
+    return out
+
+
+@router.post("/bulk")
+def bulk_create(request: Request, text: str = Body(...), label: str = Body(""), u=Depends(current_user)):
+    from . import bulk
+    try:
+        return bulk.create_job(bulk.extract_links(text), label, u)
+    except bulk.BulkError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/bulk/upload")
+async def bulk_upload(request: Request, file: UploadFile = File(...), label: str = Form(""), u=Depends(current_user)):
+    from . import bulk
+    data = await file.read()
+    try:
+        return bulk.create_job(bulk.links_from_file(file.filename, data), label or file.filename, u)
+    except bulk.BulkError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/bulk")
+def bulk_list(u=Depends(current_user)):
+    from .db import BulkJob
+    with SessionLocal() as s:
+        return [_bulk_out(s, j, u) for j in s.query(BulkJob).order_by(BulkJob.id.desc()).limit(50).all()]
+
+
+@router.get("/bulk/{jid}")
+def bulk_get(jid: int, u=Depends(current_user)):
+    from .db import BulkJob
+    with SessionLocal() as s:
+        j = s.get(BulkJob, jid)
+        if not j:
+            raise HTTPException(404)
+        return _bulk_out(s, j, u, with_items=True)
+
+
+@router.post("/bulk/{jid}/cancel")
+def bulk_cancel(jid: int, u=Depends(current_user)):
+    from . import bulk
+    from .db import BulkJob
+    with SessionLocal() as s:
+        j = s.get(BulkJob, jid)
+        if not j:
+            raise HTTPException(404)
+        if j.created_by_id != u.id and not can(u, "IO"):
+            raise HTTPException(403, "Only the officer who started this list, or an IO, can stop it")
+    return {"skipped": bulk.cancel(jid, u)}

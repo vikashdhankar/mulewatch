@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { T, useT } from "../i18n";
 import { Link } from "react-router-dom";
 import { api, can, caseId, inr, istTime, STATUS } from "../api";
 import { useAuth } from "../auth";
@@ -26,6 +27,7 @@ function fmtLeft(ms) {
 
 /** The platform's removal window, ticking. */
 export function TakedownClock({ clock, platform }) {
+  const { t } = useT();
   const running = clock && !clock.removed_at;
   const now = useNow(running);
   if (!clock) return null;
@@ -33,8 +35,8 @@ export function TakedownClock({ clock, platform }) {
     return (
       <div className={`clock clock-${clock.state}`}>
         <Icon name="clock" />
-        <div><b>{clock.state === "met" ? "Removed within the window" : "Removed after the window ran out"}</b>
-          <span>{platform} took {clock.took_minutes < 120 ? `${clock.took_minutes} min` : `${(clock.took_minutes / 60).toFixed(1)} h`} after the notice ({clock.window_hours} h allowed)</span></div>
+        <div><b>{clock.state === "met" ? t("Removed within the window") : t("Removed after the window ran out")}</b>
+          <span>{t("{p} took {d} after the notice ({h} h allowed)", { p: platform, d: clock.took_minutes < 120 ? t("{n} min", { n: clock.took_minutes }) : t("{n} h", { n: (clock.took_minutes / 60).toFixed(1) }), h: clock.window_hours })}</span></div>
       </div>
     );
   }
@@ -45,9 +47,9 @@ export function TakedownClock({ clock, platform }) {
     <div className={`clock clock-${state}`} role="timer">
       <Icon name="clock" />
       <div className="clock-body">
-        <b>{state === "overdue" ? `Overdue by ${fmtLeft(left)}` : `${fmtLeft(left)} left`}</b>
-        <span>{state === "overdue" ? `${platform} has not removed the content within ${clock.window_hours} h of the notice. Escalate or record non-compliance.`
-          : `for ${platform} to remove the content · notice sent ${istTime(clock.sent_at)} IST`}</span>
+        <b>{state === "overdue" ? t("Overdue by {d}", { d: fmtLeft(left) }) : t("{d} left", { d: fmtLeft(left) })}</b>
+        <span>{state === "overdue" ? t("{p} has not removed the content within {h} h of the notice. Escalate or record non-compliance.", { p: platform, h: clock.window_hours })
+          : t("for {p} to remove the content · notice sent {when} IST", { p: platform, when: istTime(clock.sent_at) })}</span>
         <div className="clock-bar"><i style={{ width: `${pct}%` }} /></div>
       </div>
     </div>
@@ -55,6 +57,7 @@ export function TakedownClock({ clock, platform }) {
 }
 
 export function WorkflowPanel({ pid, info, onChange }) {
+  const { t } = useT();
   const { me } = useAuth();
   const [users, setUsers] = useState([]);
   const [fir, setFir] = useState(info.fir_number);
@@ -77,13 +80,13 @@ export function WorkflowPanel({ pid, info, onChange }) {
 
   return (
     <section className="panel wf">
-      <div className="panel-head"><h2>Case workflow</h2><StatusChip status={info.status} /></div>
+      <div className="panel-head"><h2>{t("Case workflow")}</h2><StatusChip status={info.status} /></div>
       <ol className="steps">
         {FLOW.map((s, i) => (
-          <li key={s} className={info.status === "CLOSED_NO_ACTION" ? "" : i < idx ? "done" : i === idx ? "now" : ""}>{STATUS[s]}</li>
+          <li key={s} className={info.status === "CLOSED_NO_ACTION" ? "" : i < idx ? "done" : i === idx ? "now" : ""}>{t(STATUS[s])}</li>
         ))}
       </ol>
-      {info.status === "CLOSED_NO_ACTION" && <p className="muted small">This case was closed without action.</p>}
+      {info.status === "CLOSED_NO_ACTION" && <p className="muted small">{t("This case was closed without action.")}</p>}
       {info.can_act ? (
         <>
           {info.allowed_next.length > 0 && (
@@ -91,7 +94,7 @@ export function WorkflowPanel({ pid, info, onChange }) {
               {info.allowed_next.map((n) => (
                 <button key={n.status} className={`btn${["VERIFIED", "NOTICE_SENT", "CONTENT_REMOVED", "FIR_LINKED"].includes(n.status) ? " btn-primary" : ""}`}
                   disabled={!!busy} onClick={() => save({ status: n.status, fir_number: fir }, n.status)}>
-                  {n.status === "NOTICE_SENT" ? "Mark notice sent (starts clock)" : n.status === "NEW" ? "Reopen" : `Mark ${n.label.toLowerCase()}`}
+                  {n.status === "NOTICE_SENT" ? t("Mark notice sent (starts clock)") : n.status === "NEW" ? t("Reopen") : t("Mark: {s}", { s: t(n.label) })}
                 </button>
               ))}
             </div>
@@ -101,28 +104,28 @@ export function WorkflowPanel({ pid, info, onChange }) {
               {info.can_assign_others ? (
                 <select value={info.assigned_to?.id || ""} disabled={!!busy}
                   onChange={(e) => save({ assigned_to: e.target.value ? Number(e.target.value) : null }, "assign")}>
-                  <option value="">Not assigned</option>
+                  <option value="">{t("Not assigned")}</option>
                   {officers.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.designation || u.role})</option>)}
                 </select>
               ) : (
                 <div className="wf-assign">
-                  <span>{info.assigned_to ? info.assigned_to.name : "Not assigned"}</span>
-                  {!info.assigned_to && <button className="linkish" onClick={() => save({ assigned_to: me.id }, "assign")}>Take this case</button>}
-                  {info.assigned_to?.id === me.id && <button className="linkish" onClick={() => save({ assigned_to: null }, "assign")}>Release</button>}
+                  <span>{info.assigned_to ? info.assigned_to.name : t("Not assigned")}</span>
+                  {!info.assigned_to && <button className="linkish" onClick={() => save({ assigned_to: me.id }, "assign")}>{t("Take this case")}</button>}
+                  {info.assigned_to?.id === me.id && <button className="linkish" onClick={() => save({ assigned_to: null }, "assign")}>{t("Release")}</button>}
                 </div>
               )}
             </label>
-            <label>FIR number<input value={fir} onChange={(e) => setFir(e.target.value)} placeholder="e.g. 123/2026" /></label>
-            <label className="span2">Police station<input value={ps} onChange={(e) => setPs(e.target.value)} placeholder="Cyber Police Station, …" /></label>
-            <label className="span2">Case notes<textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What was done, who was contacted, reference numbers…" /></label>
+            <label>{t("FIR number")}<input value={fir} onChange={(e) => setFir(e.target.value)} placeholder="e.g. 123/2026" /></label>
+            <label className="span2">{t("Police station")}<input value={ps} onChange={(e) => setPs(e.target.value)} placeholder={t("Cyber Police Station, …")} /></label>
+            <label className="span2">{t("Case notes")}<textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("What was done, who was contacted, reference numbers…")} /></label>
           </div>
-          {dirty && <button className="btn" disabled={!!busy} onClick={() => save({ fir_number: fir, police_station: ps, notes }, "details")}>Save details</button>}
+          {dirty && <button className="btn" disabled={!!busy} onClick={() => save({ fir_number: fir, police_station: ps, notes }, "details")}>{t("Save details")}</button>}
         </>
       ) : (
         <dl className="sys small">
-          <dt>Assigned to</dt><dd>{info.assigned_to ? info.assigned_to.name : "Not assigned"}</dd>
-          {info.fir_number && <><dt>FIR</dt><dd>{info.fir_number}</dd></>}
-          <dt>Next steps</dt><dd className="muted">An Investigating Officer takes the case from here.</dd>
+          <dt>{t("Assigned to")}</dt><dd>{info.assigned_to ? info.assigned_to.name : t("Not assigned")}</dd>
+          {info.fir_number && <><dt>{t("FIR")}</dt><dd>{info.fir_number}</dd></>}
+          <dt>{t("Next steps")}</dt><dd className="muted">{t("An Investigating Officer takes the case from here.")}</dd>
         </dl>
       )}
       {err && <p className="err small">{err}</p>}
@@ -131,26 +134,28 @@ export function WorkflowPanel({ pid, info, onChange }) {
 }
 
 export function RecruiterCard({ info }) {
+  const { t } = useT();
   if (!info.recruiter_score) return null;
   const s = Math.round(info.recruiter_score);
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Recruiter priority</h2><span className={`prio ${s >= 60 ? "hi" : s >= 30 ? "mid" : ""}`}>{s}/100</span></div>
+      <div className="panel-head"><h2>{t("Recruiter priority")}</h2><span className={`prio ${s >= 60 ? "hi" : s >= 30 ? "mid" : ""}`}>{s}/100</span></div>
       <ul className="reasons small">{info.recruiter_reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-      <p className="muted small">Recruiters and bulk resellers are ranked above people selling one account, who are often victims themselves.</p>
+      <p className="muted small">{t("Recruiters and bulk resellers are ranked above people selling one account, who are often victims themselves.")}</p>
     </section>
   );
 }
 
 export function ComplaintsPanel({ info }) {
+  const { t } = useT();
   const c = info.complaints;
   if (!c.count) return null;
   return (
     <section className="panel panel-comp">
-      <div className="panel-head"><h2>Victim complaints ({c.count})</h2><b className="money">{inr(c.amount)} lost</b></div>
+      <div className="panel-head"><h2>{t("Victim complaints ({n})", { n: c.count })}</h2><b className="money">{t("{amount} lost", { amount: inr(c.amount) })}</b></div>
       {c.items ? (
         <div className="tbl-wrap"><table className="tbl tbl-tight">
-          <thead><tr><th>Complaint</th><th>Date</th><th>Amount</th><th>District</th><th>Matched on</th></tr></thead>
+          <thead><tr><th>{t("Complaint")}</th><th>{t("Date")}</th><th>{t("Amount")}</th><th>{t("District")}</th><th>{t("Matched on")}</th></tr></thead>
           <tbody>{c.items.map((x) => (
             <tr key={x.id}>
               <td><code>{x.complaint_id}</code>{x.category && <div className="muted small">{x.category}</div>}</td>
@@ -159,22 +164,23 @@ export function ComplaintsPanel({ info }) {
             </tr>
           ))}</tbody>
         </table></div>
-      ) : <p className="muted small">The identifiers in this ad appear in {c.count} victim complaint{c.count === 1 ? "" : "s"}. Complaint details are visible to Investigating Officers.</p>}
+      ) : <p className="muted small">{t("The identifiers in this ad appear in {n} victim complaints. Complaint details are visible to Investigating Officers.", { n: c.count })}</p>}
     </section>
   );
 }
 
 export function BanksPanel({ pid, info, onDraft }) {
+  const { t } = useT();
   if (!info.banks?.length) return null;
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Banks and payment apps</h2></div>
+      <div className="panel-head"><h2>{t("Banks and payment apps")}</h2></div>
       {info.banks.map((g) => (
         <div key={g.bank_code || "?"} className="bank">
           <div className="bank-head"><Icon name="bank" size={16} /><b>{g.bank}</b>{g.bank_code && <code>{g.bank_code}</code>}
-            {onDraft && <button className="linkish" onClick={() => onDraft("bank", g.bank_code || "?")}>Draft request</button>}</div>
+            {onDraft && <button className="linkish" onClick={() => onDraft("bank", g.bank_code || "?")}>{t("Draft request")}</button>}</div>
           {g.items.map((it) => (
-            <div key={it.value} className="bank-item"><span className="id-kind">{it.kind}</span><code>{it.value}</code><span className="muted small">{it.detail}</span></div>
+            <div key={it.value} className="bank-item"><span className="id-kind">{t(it.kind)}</span><code>{it.value}</code><span className="muted small">{it.detail}</span></div>
           ))}
         </div>
       ))}
@@ -183,13 +189,14 @@ export function BanksPanel({ pid, info, onDraft }) {
 }
 
 export function JurisdictionPanel({ info }) {
+  const { t } = useT();
   const j = info.jurisdiction || {};
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Suggested jurisdiction</h2>{j.confidence && j.confidence !== "none" && <span className="chip">{j.confidence} confidence</span>}</div>
+      <div className="panel-head"><h2>{t("Suggested jurisdiction")}</h2>{j.confidence && j.confidence !== "none" && <span className="chip">{t(j.confidence === "medium" ? "medium confidence" : "low confidence")}</span>}</div>
       {j.district ? (
-        <p className="juris"><Icon name="pin" size={16} /><b>{j.district}</b> <span className="muted">({j.district_hi})</span> → {j.police_station}</p>
-      ) : <p className="muted small">{j.note || "No location signal yet."}</p>}
+        <p className="juris"><Icon name="pin" size={16} /><b>{t(j.district)}</b> <span className="muted">({j.district})</span> → {t("Cyber Police Station, {d}", { d: t(j.district) })}</p>
+      ) : <p className="muted small">{j.note || t("No location signal yet.")}</p>}
       {j.signals?.length > 0 && (
         <ul className="reasons small">{j.signals.map((s, i) => <li key={i}>{s.detail}{s.kind !== "place" && <> — <code>{s.value}</code></>}</li>)}</ul>
       )}
@@ -199,41 +206,42 @@ export function JurisdictionPanel({ info }) {
 }
 
 export function EvidencePanel({ pid, info }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [showLog, setShowLog] = useState(false);
   const { me } = useAuth();
   const pack = async () => {
     setBusy(true); setMsg("");
-    try { const r = await api.evidencePack(pid); setMsg(`Downloaded ${r.name}. SHA-256 of the ZIP: ${r.sha}`); } catch (e) { setMsg(e.message); }
+    try { const r = await api.evidencePack(pid); setMsg(t("Downloaded {name}. SHA-256 of the ZIP: {sha}", { name: r.name, sha: r.sha })); } catch (e) { setMsg(e.message); }
     setBusy(false);
   };
   const intact = info.evidence.every((f) => f.intact);
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Evidence</h2>
-        {info.evidence.length > 0 && <span className={`chip ${intact ? "chip-ok" : "chip-td"}`}>{intact ? "unchanged since capture" : "a file has changed"}</span>}</div>
+      <div className="panel-head"><h2>{t("Evidence")}</h2>
+        {info.evidence.length > 0 && <span className={`chip ${intact ? "chip-ok" : "chip-td"}`}>{intact ? t("unchanged since capture") : t("a file has changed")}</span>}</div>
       {info.evidence.length ? (
         <div className="ev-files">{info.evidence.map((f) => (
           <div key={f.id} className="ev-file">
-            <span className="id-kind">{f.kind}</span>
-            <div><b>{f.name}</b> <span className="muted small">{(f.size / 1024).toFixed(1)} KB · captured {istTime(f.captured_at)} IST</span>
+            <span className="id-kind">{t(f.kind)}</span>
+            <div><b>{f.name}</b> <span className="muted small">{(f.size / 1024).toFixed(1)} KB · {t("captured {when} IST", { when: istTime(f.captured_at) })}</span>
               <code className="hash">{f.sha256}</code></div>
-            {can(me, "IO") && <button className="icon-btn" title="Download" onClick={() => api.evidenceFile(pid, f.id).catch((e) => setMsg(e.message))}><Icon name="download" size={16} /></button>}
+            {can(me, "IO") && <button className="icon-btn" title={t("Download")} onClick={() => api.evidenceFile(pid, f.id).catch((e) => setMsg(e.message))}><Icon name="download" size={16} /></button>}
           </div>
         ))}</div>
-      ) : <p className="muted small">Captured before evidence capture was added. The record hash is still below.</p>}
-      {!info.screenshots?.screenshots && <p className="muted small">Full-page screenshots are off: {info.screenshots?.error || "install Playwright to turn them on"}.</p>}
+      ) : <p className="muted small">{t("Captured before evidence capture was added. The record hash is still below.")}</p>}
+      {!info.screenshots?.screenshots && <p className="muted small">{t("Full-page screenshots are off:")} {info.screenshots?.error || t("install Playwright to turn them on")}</p>}
       {can(me, "IO") && (
         <div className="ev-actions">
-          <button className="btn" disabled={busy} onClick={pack}><Icon name="download" /> Evidence pack (ZIP)</button>
-          <button className="linkish" onClick={() => setShowLog(!showLog)}>{showLog ? "Hide" : "Show"} chain of custody ({info.custody?.length || 0})</button>
+          <button className="btn" disabled={busy} onClick={pack}><Icon name="download" /> {t("Evidence pack (ZIP)")}</button>
+          <button className="linkish" onClick={() => setShowLog(!showLog)}>{t(showLog ? "Hide chain of custody ({n})" : "Show chain of custody ({n})", { n: info.custody?.length || 0 })}</button>
         </div>
       )}
       {msg && <p className="small note">{msg}</p>}
       {showLog && (
         <div className="tbl-wrap"><table className="tbl tbl-tight custody">
-          <thead><tr><th>When (IST)</th><th>Who</th><th>Action</th></tr></thead>
+          <thead><tr><th>{t("When (IST)")}</th><th>{t("Who")}</th><th>{t("Action")}</th></tr></thead>
           <tbody>{info.custody.slice().reverse().map((r) => (
             <tr key={r.id}><td className="small">{istTime(r.at)}</td><td className="small">{r.username}</td><td className="small"><code>{r.action}</code></td></tr>
           ))}</tbody>
@@ -251,15 +259,16 @@ const DRAFT_HELP = {
 };
 
 export function DraftsPanel({ info, onOpen }) {
+  const { t } = useT();
   if (!info.can_act) return null;
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Legal drafts</h2><span className="muted small">English or Hindi · Word or PDF</span></div>
+      <div className="panel-head"><h2>{t("Legal drafts")}</h2><span className="muted small">{t("English or Hindi · Word or PDF")}</span></div>
       <div className="drafts">
         {info.drafts.map((d) => (
           <button key={d.kind} className="draft-btn" disabled={d.kind === "bank" && !info.banks.length} onClick={() => onOpen(d.kind)}>
             <Icon name="doc" size={18} />
-            <span><b>{d.label}</b><small>{d.kind === "bank" && !info.banks.length ? "No bank or UPI identifier in this post" : DRAFT_HELP[d.kind]}</small></span>
+            <span><b>{t(d.label)}</b><small>{d.kind === "bank" && !info.banks.length ? t("No bank or UPI identifier in this post") : t(DRAFT_HELP[d.kind])}</small></span>
           </button>
         ))}
       </div>
@@ -268,6 +277,7 @@ export function DraftsPanel({ info, onOpen }) {
 }
 
 export function DraftEditor({ pid, kind, bank: bank0, label, onClose, onExported }) {
+  const { t } = useT();
   const [lang, setLang] = useState("en");
   const [bank, setBank] = useState(bank0);
   const [data, setData] = useState(null);
@@ -288,22 +298,22 @@ export function DraftEditor({ pid, kind, bank: bank0, label, onClose, onExported
     <Modal title={`${label} — ${caseId(pid)}`} onClose={onClose} wide>
       <div className="draft-bar">
         <div className="seg">
-          <button className={`seg-btn${lang === "en" ? " on-indigo" : ""}`} onClick={() => setLang("en")}>English</button>
+          <button className={`seg-btn${lang === "en" ? " on-indigo" : ""}`} onClick={() => setLang("en")}>{t("English")}</button>
           <button className={`seg-btn${lang === "hi" ? " on-indigo" : ""}`} onClick={() => setLang("hi")}>हिंदी</button>
         </div>
         {kind === "bank" && data?.banks?.length > 1 && (
-          <select value={bank} onChange={(e) => setBank(e.target.value)} aria-label="Bank">
+          <select value={bank} onChange={(e) => setBank(e.target.value)} aria-label={t("Bank")}>
             {data.banks.map((b) => <option key={b.code} value={b.code}>{b.bank}</option>)}
           </select>
         )}
-        <span className={`blanks${blanks ? "" : " ok"}`}>{blanks ? `${blanks} field${blanks === 1 ? "" : "s"} to fill or confirm [[ … ]]` : "No blanks left"}</span>
+        <span className={`blanks${blanks ? "" : " ok"}`}>{blanks ? t("{n} fields to fill or confirm [[ … ]]", { n: blanks }) : t("No blanks left")}</span>
       </div>
       {err && <p className="err">{err}</p>}
-      {data ? <textarea className="draft-text" value={text} onChange={(e) => setText(e.target.value)} spellCheck={lang === "en"} /> : <p className="muted">Preparing the draft…</p>}
+      {data ? <textarea className="draft-text" value={text} onChange={(e) => setText(e.target.value)} spellCheck={lang === "en"} /> : <p className="muted">{t("Preparing the draft…")}</p>}
       <div className="draft-foot">
-        <p className="muted small">Edit the text here, then download. Every file is marked “DRAFT — to be reviewed and signed by the authorised officer”, and the export is recorded in the audit log. The legal references are a starting point; confirm them before sending.</p>
+        <p className="muted small">{t("Edit the text here, then download. Every file is marked “DRAFT — to be reviewed and signed by the authorised officer”, and the export is recorded in the audit log. The legal references are a starting point; confirm them before sending.")}</p>
         <div className="draft-dl">
-          <button className="btn" disabled={!data || !!busy} onClick={() => exp("docx")}><Icon name="download" /> Word</button>
+          <button className="btn" disabled={!data || !!busy} onClick={() => exp("docx")}><Icon name="download" /> {t("Word")}</button>
           <button className="btn btn-primary" disabled={!data || !!busy} onClick={() => exp("pdf")}><Icon name="pdf" /> PDF</button>
         </div>
       </div>
@@ -312,8 +322,9 @@ export function DraftEditor({ pid, kind, bank: bank0, label, onClose, onExported
 }
 
 export function RepostBanner({ info }) {
+  const { t } = useT();
   if (!info.repost_of) return null;
   return (
-    <div className="banner warn case-banner"><Icon name="repeat" /> This came back after a takedown: it is linked to <Link to={`/case/${info.repost_of}`}>{caseId(info.repost_of)}</Link>, which was removed. Consider a notice against the account itself, not just the post.</div>
+    <div className="banner warn case-banner"><Icon name="repeat" /> <span><T k="This came back after a takedown: it is linked to {case}, which was removed. Consider a notice against the account itself, not just the post." case={<Link to={`/case/${info.repost_of}`}>{caseId(info.repost_of)}</Link>} /></span></div>
   );
 }
