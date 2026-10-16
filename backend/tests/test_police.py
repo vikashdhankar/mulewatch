@@ -321,3 +321,71 @@ def test_bulk_job_runs_and_makes_cases(monkeypatch):
         _t.sleep(0.25)
     assert j2["items"][0]["status"] == "existing"
     assert analyst.post("/api/bulk", json={"text": "nothing here"}).status_code == 400
+
+
+# ----------------------------------------------------------------------------- internet discovery
+
+def test_discovery_queries_cover_every_target_district():
+    from app import discovery
+    g = discovery.generated()
+    for d in discovery.PHASE1:
+        mine = [x for x in g if x["district"] == d]
+        assert {x["site"] for x in mine} >= {"t.me", "instagram.com", "facebook.com", ""}
+        assert any(jurisdiction.DISTRICTS[d]["hi"] in x["text"] for x in mine)        # Hindi wording too
+    assert any(x["district"] == "" and "Rajasthan" in x["text"] for x in g)
+    assert discovery.normalise("https://m.facebook.com/groups/x/?utm_source=a&id=3#c") == "https://www.facebook.com/groups/x?id=3"
+    assert discovery.channels_in("join t.me/kitwala_jpr or https://t.me/s/CardZone_X and t.me/joinchat/abc") == {"kitwala_jpr", "cardzone_x"}
+
+
+def test_discovery_cycle_turns_results_into_cases(monkeypatch):
+    from app import discovery, fetcher
+    from app.db import DiscoveredChannel, DiscoveryHit, DiscoveryRun
+
+    def fake_search(q):
+        return "brave", [
+            {"url": "https://www.instagram.com/p/KIT1/?igshid=zz", "title": "Bank account kit available Jodhpur",
+             "snippet": "Current account full kit ATM + passbook + net banking, 18k. DM t.me/jodhpur_kits", "published": ""},
+            {"url": "https://news.example/mule-awareness", "title": "Police warn students about renting bank accounts",
+             "snippet": "Do not rent your account; report at cybercrime.gov.in or call 1930.", "published": ""},
+            {"url": "https://cybercrime.gov.in/advice", "title": "x", "snippet": "y", "published": ""},
+        ]
+
+    def fake_fetch(url):
+        raise fetcher.FetchError("Login required")
+
+    monkeypatch.setenv("BRAVE_API_KEY", "test")
+    monkeypatch.setenv("DISCOVERY_DAILY_QUERIES", "3")
+    monkeypatch.setattr(discovery, "search", fake_search)
+    monkeypatch.setattr(discovery, "PAUSE", 0)
+    monkeypatch.setattr(fetcher, "fetch_url", fake_fetch)
+    out = discovery.run_cycle(max_queries=2)
+    assert out["ok"] and out["queries"] == 2 and out["new_hits"] == 2           # gov.in skipped, duplicates merged
+    with SessionLocal() as s:
+        kit = s.query(DiscoveryHit).filter_by(url="https://www.instagram.com/p/KIT1").one()
+        assert kit.status == "case" and kit.how == "snippet" and kit.seen_count == 2
+        p = s.get(Post, kit.post_id)
+        assert p.source == "discovery" and p.risk_level in ("High", "Critical")
+        assert any("search result only" in r for r in p.reasons)
+        news = s.query(DiscoveryHit).filter_by(url="https://news.example/mule-awareness").one()
+        assert news.status == "skipped"
+        assert s.query(DiscoveredChannel).filter_by(handle="jodhpur_kits").one().status == "suggested"
+    # the budget stops the next run after 3 searches today
+    assert discovery.run_cycle(max_queries=5)["queries"] == 1
+    assert discovery.run_cycle()["ok"] is False
+    # API: analysts can read, only IOs can run or add searches
+    analyst, io = client("analyst"), client("io")
+    st = analyst.get("/api/discovery").json()
+    assert st["provider"] == "brave" and st["used_today"] == 3
+    assert any(d["district"] == "Jodhpur" for d in st["districts"])
+    hits = analyst.get("/api/discovery/hits", params={"show": "flagged"}).json()
+    assert hits["total"] >= 1 and hits["items"][0]["post"]
+    assert analyst.post("/api/discovery/run").status_code == 403
+    r = io.post("/api/discovery/queries", json={"text": "khata chahiye withdrawal", "district": "Kota", "site": "t.me"})
+    assert r.status_code == 200 and r.json()["text"] == "khata chahiye withdrawal Kota site:t.me"
+    ch = io.get("/api/discovery/channels").json()
+    cid = next(c["id"] for c in ch if c["handle"] == "jodhpur_kits")
+    assert io.post(f"/api/discovery/channels/{cid}", json={"action": "monitor"}).status_code == 200
+    with SessionLocal() as s:
+        from app.db import Source
+        assert s.query(Source).filter(Source.url.like("%jodhpur_kits")).count() == 1
+        assert s.query(DiscoveryRun).count() == 2

@@ -347,6 +347,57 @@ HI = {
     "Maharashtra & Goa": "महाराष्ट्र व गोवा", "Mumbai": "मुंबई", "North East": "पूर्वोत्तर", "Odisha": "ओडिशा", "Punjab": "पंजाब",
     "Rajasthan": "राजस्थान", "Tamil Nadu": "तमिलनाडु", "UP (East)": "उत्तर प्रदेश (पूर्व)", "UP (West)": "उत्तर प्रदेश (पश्चिम)",
     "West Bengal": "पश्चिम बंगाल", "Uttar Pradesh": "उत्तर प्रदेश", "Bank": "बैंक",
+    # ---- internet discovery
+    "India": "भारत", "{n} case": "{n} प्रकरण",
+    "India's external and state boundaries are drawn from Survey of India records, with no online map tiles, so the map works offline. District lines are the 33 districts of Census 2011; districts created since (Balotra, Beawar, Deeg, Didwana-Kuchaman, Khairthal-Tijara, Kotputli-Behror, Phalodi, Salumbar) are shown by their headquarters. Darker shading means more High/Critical cases.":
+        "भारत की बाहरी और राज्य सीमाएँ भारतीय सर्वेक्षण विभाग (Survey of India) के अभिलेखों से बनाई गई हैं, ऑनलाइन मानचित्र टाइल के बिना, इसलिए मानचित्र ऑफ़लाइन भी चलता है। ज़िला रेखाएँ जनगणना 2011 के 33 ज़िलों की हैं; बाद में बने ज़िले (बालोतरा, ब्यावर, डीग, डीडवाना-कुचामन, खैरथल-तिजारा, कोटपूतली-बहरोड़, फलोदी, सलूंबर) उनके मुख्यालय से दिखाए गए हैं। गहरा रंग अधिक उच्च/गंभीर प्रकरण दर्शाता है।",
+    "Internet discovery": "इंटरनेट खोज", "Search engine": "सर्च इंजन", "Demo mode": "डेमो मोड", "Not set up": "सेट नहीं",
+    "Running in demo mode: searches go to the local Charcha forum, not the internet.": "डेमो मोड चालू है: खोज इंटरनेट पर नहीं, स्थानीय चर्चा फ़ोरम पर हो रही है।",
+    "No search provider is set up.": "कोई सर्च प्रदाता सेट नहीं है।",
+    "To search the whole internet, put one of these in .env and restart:": "पूरे इंटरनेट पर खोज हेतु इनमें से एक .env में डालें और फिर से शुरू करें:",
+    "Brave Search API (independent index, pay per search)": "Brave Search API (स्वतंत्र इंडेक्स, प्रति खोज भुगतान)",
+    "Serper.dev (Google results, pay per search)": "Serper.dev (Google परिणाम, प्रति खोज भुगतान)",
+    "Google Programmable Search (existing customers only)": "Google Programmable Search (केवल मौजूदा ग्राहक)",
+    "your own SearXNG server (free)": "अपना SearXNG सर्वर (निःशुल्क)",
+    "{a} of {b} searches used today": "आज {b} में से {a} खोजें उपयोग हुईं", "Schedule": "समय-सारणी",
+    "Every {m} min, up to {b} searches each time": "हर {m} मिनट, हर बार {b} तक खोजें",
+    "Searches in rotation": "बारी-बारी से चलने वाली खोजें", "all repeated about every {d} days": "सभी लगभग हर {d} दिन में दोहराई जाती हैं",
+    "Results from the last": "इतने समय के परिणाम", "week": "पिछला सप्ताह", "month": "पिछला महीना", "year": "पिछला वर्ष", "any time": "कभी भी",
+    "Next run": "अगली खोज", "running now…": "अभी चल रही है…", "Searching…": "खोज जारी…", "Search now": "अभी खोजें",
+    "Search run started": "खोज शुरू हुई", "A search run is already in progress": "एक खोज पहले से चल रही है",
+    "Recent runs": "हाल की खोजें", "Searches": "खोजें", "Results": "परिणाम", "New": "नया", "Flagged": "चिह्नित", "scheduled": "निर्धारित",
+    "No runs yet.": "अभी कोई खोज नहीं चली।", "Statewide": "पूरा राज्य", "flagged · {n} found": "चिह्नित · {n} मिले",
+    "last flagged {ago}": "अंतिम चिह्नित {ago}", "{n} searches run": "{n} खोजें चलीं", "All opened": "सभी खोले गए",
+    "Everything found": "जो भी मिला", "Not opened": "नहीं खोले गए", "Platform": "प्लेटफ़ॉर्म", "All platforms": "सभी प्लेटफ़ॉर्म",
+    "{n} results": "{n} परिणाम", "Found": "मिला", "Search result": "खोज परिणाम", "seen in {n} searches": "{n} खोजों में दिखा",
+    "The page needs a login, so the case was built from the search result. Open the original and verify.":
+        "पेज के लिए लॉगिन चाहिए, इसलिए प्रकरण खोज परिणाम से बना। मूल पेज खोलकर पुष्टि करें।",
+    "from search result only": "केवल खोज परिणाम से", "first look {s}": "प्रारंभिक स्कोर {s}",
+    "not opened": "नहीं खोला", "couldn't open": "खुल नहीं सका",
+    "Nothing High or Critical found yet": "अभी कुछ उच्च या गंभीर नहीं मिला", "Nothing here yet": "यहाँ अभी कुछ नहीं",
+    "Results appear here after each search run.": "हर खोज के बाद परिणाम यहाँ दिखते हैं।",
+    "Telegram channels and groups named in what the search found. Monitoring one adds it to Monitored sources, so every new post in it is checked within seconds.":
+        "खोज में मिली सामग्री में जिन टेलीग्राम चैनलों और समूहों का नाम आया। निगरानी चुनने पर वह निगरानी स्रोतों में जुड़ जाता है, और उसकी हर नई पोस्ट कुछ सेकंड में जाँची जाती है।",
+    "Channel": "चैनल", "Mentions": "उल्लेख", "Districts": "ज़िले", "First seen": "पहली बार दिखा", "Monitor": "निगरानी करें",
+    "Ignore": "अनदेखा करें", "Undo": "वापस लें", "suggested": "सुझाया गया", "monitored": "निगरानी में", "ignored": "अनदेखा",
+    "No channels found yet": "अभी कोई चैनल नहीं मिला",
+    "Channels appear here when a search result or a page mentions a t.me link.": "जब किसी खोज परिणाम या पेज में t.me लिंक हो, तब चैनल यहाँ दिखते हैं।",
+    "Added: {q}": "जोड़ा गया: {q}", "Add a search": "खोज जोड़ें",
+    "Add wording you have seen in local ads or complaints. Your searches run before the generated ones.":
+        "स्थानीय विज्ञापनों या शिकायतों में देखे गए शब्द जोड़ें। आपकी खोजें स्वतः बनी खोजों से पहले चलती हैं।",
+    "Words to search for": "खोजने के शब्द", "e.g. khata chahiye gaming withdrawal": "जैसे khata chahiye gaming withdrawal",
+    "Only searches added by officers": "केवल अधिकारियों द्वारा जोड़ी गई खोजें", "Showing {n}": "{n} दिखाई जा रही हैं",
+    "Search": "खोज", "Runs": "बार चली", "Last run": "अंतिम बार", "added by {who}": "{who} द्वारा जोड़ी गई", "not yet": "अभी नहीं",
+    "Whole web": "पूरा वेब",
+    "Internet discovery isn't available": "इंटरनेट खोज उपलब्ध नहीं",
+    "Searches the public internet on a schedule for ads selling or renting bank accounts and cards, district by district: Telegram channels, Instagram, Facebook pages and groups, YouTube, X, OLX, forums and websites. Promising results are opened and scored like any other post, and High/Critical ones become cases with the usual alerts.":
+        "बैंक खाते और कार्ड बेचने या किराये पर देने वाले विज्ञापनों के लिए सार्वजनिक इंटरनेट पर ज़िलेवार नियमित खोज: टेलीग्राम चैनल, इंस्टाग्राम, फ़ेसबुक पेज और समूह, यूट्यूब, X, OLX, फ़ोरम और वेबसाइटें। संभावित परिणाम खोलकर अन्य पोस्ट की तरह आँके जाते हैं, और उच्च/गंभीर परिणाम सामान्य अलर्ट सहित प्रकरण बनते हैं।",
+    "Target districts": "लक्षित ज़िले", "{a} found · {b} opened · {c} High/Critical": "{a} मिले · {b} खोले गए · {c} उच्च/गंभीर",
+    "Findings": "निष्कर्ष",
+    "Only content that search engines have indexed publicly is reached; nothing behind a login is opened. Cases built from a search result alone are marked {mark}: open the original and verify before acting.":
+        "केवल वही सामग्री मिलती है जिसे सर्च इंजनों ने सार्वजनिक रूप से इंडेक्स किया है; लॉगिन के पीछे का कुछ नहीं खोला जाता। केवल खोज परिणाम से बने प्रकरणों पर {mark} लिखा होता है: कार्यवाही से पहले मूल पेज खोलकर पुष्टि करें।",
+    "Today's search budget is used up": "आज का खोज बजट समाप्त हो गया",
+    "No search provider is set up": "कोई सर्च प्रदाता सेट नहीं है",
 }
 
 if __name__ == "__main__":

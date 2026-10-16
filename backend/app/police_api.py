@@ -409,3 +409,137 @@ def bulk_cancel(jid: int, u=Depends(current_user)):
         if j.created_by_id != u.id and not can(u, "IO"):
             raise HTTPException(403, "Only the officer who started this list, or an IO, can stop it")
     return {"skipped": bulk.cancel(jid, u)}
+
+
+# ----------------------------------------------------------------------------- internet discovery
+
+def _hit_out(h, p, u):
+    from .masking import mask_text
+    snip = h.snippet or ""
+    out = {"id": h.id, "url": h.url, "title": h.title, "snippet": snip if can(u, "IO") else mask_text(snip),
+           "platform": h.platform, "district": h.district, "found_at": h.found_at.isoformat(), "provider": h.provider,
+           "published": h.published, "triage": h.triage, "status": h.status, "how": h.how, "error": h.error,
+           "seen": h.seen_count, "post": None}
+    if p:
+        out["post"] = {"id": p.id, "risk_level": p.risk_level, "risk_score": p.risk_score, "category": p.category,
+                       "complaint_count": p.complaint_count or 0}
+    return out
+
+
+@router.get("/discovery")
+def discovery_status(u=Depends(current_user)):
+    from . import discovery
+    with SessionLocal() as s:
+        discovery.ensure_queries(s)
+        return discovery.status(s) | discovery.coverage(s)
+
+
+@router.get("/discovery/hits")
+def discovery_hits(district: str = "", platform: str = "", show: str = "flagged", limit: int = Query(100, le=500),
+                   offset: int = 0, u=Depends(current_user)):
+    from .db import DiscoveryHit
+    with SessionLocal() as s:
+        q = s.query(DiscoveryHit)
+        if district:
+            q = q.filter(DiscoveryHit.district == ("" if district == "-" else district))
+        if platform:
+            q = q.filter(DiscoveryHit.platform == platform)
+        if show == "flagged":
+            q = q.join(Post, Post.id == DiscoveryHit.post_id).filter(DiscoveryHit.status.in_(("case", "existing")),
+                                                                     Post.risk_level.in_(("High", "Critical")))
+        elif show == "cases":
+            q = q.filter(DiscoveryHit.status.in_(("case", "existing")))
+        elif show == "skipped":
+            q = q.filter(DiscoveryHit.status == "skipped")
+        total = q.count()
+        rows = q.order_by(DiscoveryHit.id.desc()).offset(offset).limit(limit).all()
+        posts = {p.id: p for p in s.query(Post).filter(Post.id.in_([h.post_id for h in rows if h.post_id])).all()}
+        return {"total": total, "items": [_hit_out(h, posts.get(h.post_id), u) for h in rows]}
+
+
+@router.get("/discovery/queries")
+def discovery_queries(district: str = "", kind: str = "", u=Depends(current_user)):
+    from .db import DiscoveryQuery
+    with SessionLocal() as s:
+        q = s.query(DiscoveryQuery)
+        if district:
+            q = q.filter(DiscoveryQuery.district == ("" if district == "-" else district))
+        if kind:
+            q = q.filter(DiscoveryQuery.kind == kind)
+        rows = q.order_by(DiscoveryQuery.kind.desc(), DiscoveryQuery.flagged.desc(), DiscoveryQuery.new_hits.desc(),
+                          DiscoveryQuery.id).limit(400).all()
+        return [{"id": x.id, "text": x.text, "district": x.district, "site": x.site, "kind": x.kind,
+                 "enabled": x.enabled, "runs": x.runs, "results": x.results, "new_hits": x.new_hits,
+                 "flagged": x.flagged, "last_run": x.last_run.isoformat() if x.last_run else None,
+                 "last_error": x.last_error, "by": x.created_by} for x in rows]
+
+
+@router.post("/discovery/queries")
+def discovery_add_query(request: Request, text: str = Body(...), district: str = Body(""), site: str = Body(""),
+                        u=Depends(require("IO"))):
+    from .db import DiscoveryQuery
+    text = " ".join(text.split())[:250]
+    site = site.strip().lower().removeprefix("https://").removeprefix("www.").strip("/")
+    if len(text) < 3:
+        raise HTTPException(400, "Write the words to search for")
+    if district and district not in jurisdiction.DISTRICTS:
+        raise HTTPException(400, "Unknown district")
+    full = " ".join(x for x in (text, district if district and district.lower() not in text.lower() else "",
+                                f"site:{site}" if site and "site:" not in text else "") if x)
+    with SessionLocal() as s:
+        if s.query(DiscoveryQuery).filter_by(text=full).first():
+            raise HTTPException(400, "This search is already in the list")
+        s.add(DiscoveryQuery(text=full, term=text, district=district, site=site, kind="custom", created_by=u.username))
+        s.commit()
+    audit.log(u, "discovery.query_added", detail={"query": full}, ip=ip_of(request))
+    return {"ok": True, "text": full}
+
+
+@router.patch("/discovery/queries/{qid}")
+def discovery_toggle_query(qid: int, request: Request, enabled: bool = Body(..., embed=True), u=Depends(require("IO"))):
+    from .db import DiscoveryQuery
+    with SessionLocal() as s:
+        q = s.get(DiscoveryQuery, qid)
+        if not q:
+            raise HTTPException(404)
+        q.enabled = enabled
+        q.created_by = q.created_by if q.kind == "custom" else ("" if enabled else u.username)
+        s.commit()
+    audit.log(u, "discovery.query_toggled", detail={"query": qid, "enabled": enabled}, ip=ip_of(request))
+    return {"ok": True}
+
+
+@router.post("/discovery/run")
+def discovery_run(request: Request, u=Depends(require("IO"))):
+    from . import discovery
+    return discovery.run_now(u)
+
+
+@router.get("/discovery/channels")
+def discovery_channels(u=Depends(current_user)):
+    from .db import DiscoveredChannel
+    with SessionLocal() as s:
+        rows = s.query(DiscoveredChannel).order_by(DiscoveredChannel.status, DiscoveredChannel.mentions.desc()).limit(200).all()
+        return [{"id": c.id, "handle": c.handle, "mentions": c.mentions, "districts": c.districts or [],
+                 "first_seen": c.first_seen.isoformat(), "last_seen": c.last_seen.isoformat(),
+                 "example_url": c.example_url, "status": c.status, "by": c.decided_by} for c in rows]
+
+
+@router.post("/discovery/channels/{cid}")
+def discovery_channel_decide(cid: int, request: Request, action: str = Body(..., embed=True), u=Depends(require("IO"))):
+    from .db import DiscoveredChannel, Source
+    if action not in ("monitor", "ignore", "reset"):
+        raise HTTPException(400, "action must be monitor, ignore or reset")
+    with SessionLocal() as s:
+        c = s.get(DiscoveredChannel, cid)
+        if not c:
+            raise HTTPException(404)
+        if action == "monitor":
+            url = f"https://t.me/s/{c.handle}"
+            if not s.query(Source).filter(Source.kind == "telegram", Source.url.ilike(f"%/{c.handle}")).first():
+                s.add(Source(kind="telegram", url=url, name=f"Telegram @{c.handle} (found by discovery)"))
+        c.status = {"monitor": "monitored", "ignore": "ignored", "reset": "suggested"}[action]
+        c.decided_by = u.username
+        s.commit()
+    audit.log(u, f"discovery.channel_{action}", detail={"channel": c.handle}, ip=ip_of(request))
+    return {"ok": True}

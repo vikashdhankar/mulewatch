@@ -111,7 +111,7 @@ function JobDetail({ id }) {
                 <td>{i.post ? <RiskBadge level={i.post.risk_level} score={i.post.risk_score} />
                   : i.status === "error" ? <span className="small err">{i.error}</span>
                   : <span className="chip">{t(i.status === "queued" ? "waiting" : i.status)}</span>}
-                  {i.post?.complaint_count > 0 && <div><span className="chip chip-comp">{t("{n} complaints", { n: i.post.complaint_count })}</span></div>}
+                  {i.post?.complaint_count > 0 && <div><span className="chip chip-comp">{t(i.post.complaint_count === 1 ? "{n} complaint" : "{n} complaints", { n: i.post.complaint_count })}</span></div>}
                   {i.status === "existing" && <div className="small muted">{t("already a case")}</div>}</td>
                 <td>{i.post && <Link to={`/case/${i.post.id}`}><code>{caseId(i.post.id)}</code></Link>}
                   {i.post && <div className="small muted">{t(i.post.category)}</div>}</td>

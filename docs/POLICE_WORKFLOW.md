@@ -149,8 +149,10 @@ circle suggests routing through I4C or that state's cyber cell. Ported numbers m
 shown as a hint and never decides the district.
 
 **District map** shows High/Critical cases per Rajasthan district (41 districts after the December 2024
-reorganisation), and how many case mobile numbers come from each telecom circle. The map tiles need internet; the
-district list works offline.
+reorganisation), and how many case mobile numbers come from each telecom circle. India's external and state
+boundaries are drawn from Survey of India records (`frontend/public/geo/`), with no online map tiles, so the map
+shows India's boundaries as published by the Government of India and works offline. District shading uses the 33
+district boundaries of Census 2011; the eight districts created since are shown by their headquarters.
 
 ---
 
@@ -213,7 +215,49 @@ that the detection engine writes for each case stay in English. Translations liv
 
 ---
 
-## 12. Settings (`.env`)
+## 12. Internet discovery
+
+**Internet discovery** searches the public internet on a schedule for ads selling or renting bank accounts and
+cards, district by district. Phase 1 targets Jaipur, Jodhpur, Udaipur, Bikaner, Bharatpur, Jhunjhunu, Sikar, Kota
+and Dholpur, plus statewide searches.
+
+How it works:
+
+1. It builds about 1,200 searches: seller wording in English, Hinglish and Hindi ("bank account kit", "khata kiraye
+   par", "बैंक खाता किराये पर" …) × each district (English or Hindi name) × each platform (Telegram, Instagram,
+   Facebook, YouTube, X, OLX, ShareChat, Quora, Reddit, or the whole web).
+2. Every `DISCOVERY_INTERVAL_MINUTES` it runs the most overdue searches, taking districts in turn, within the daily
+   budget. Searches that found High/Critical ads before run more often; searches officers add run first.
+3. Each new result's title and snippet get a quick score. Promising ones are opened and scored like any other post,
+   and High/Critical ones become cases with the usual alerts, evidence, drafts and complaint matching. Pages that
+   need a login (most Instagram and Facebook posts) become cases from the search result alone, marked
+   **from search result only**: open the original and verify before acting.
+4. Telegram channels named in what it finds are listed under **Telegram channels**. **Monitor** adds one to
+   Monitored sources, so every new post in it is checked within seconds.
+
+A result is tagged with a district only when it names a place in that district, or when the case's jurisdiction
+points there; search engines also return pages about other places.
+
+What it can and cannot see: only what search engines have indexed publicly (open Telegram channels, public
+Instagram profiles and posts, public Facebook pages and groups, YouTube, X, OLX, forums, websites). Private groups,
+WhatsApp and anything behind a login are not reachable this way, and MuleWatch does not try to log in anywhere.
+
+**Search provider** (one is enough; put the key in `.env` and restart):
+
+| Setting | Provider | Notes |
+|---|---|---|
+| `BRAVE_API_KEY` | Brave Search API | Independent index, paid per search |
+| `SERPER_API_KEY` | Serper.dev | Google results, paid per search |
+| `GOOGLE_CSE_KEY` + `GOOGLE_CSE_CX` | Google Programmable Search | Closed to new customers |
+| `SEARXNG_URL` | Self-hosted SearXNG | Free; quality depends on its upstream engines |
+
+Without a key it runs in **demo mode** against the local Charcha forum's search, so the pipeline can be shown offline.
+At the default budget of 100 searches a day, the full set repeats about every 12 days; raise
+`DISCOVERY_DAILY_QUERIES` for faster coverage.
+
+---
+
+## 13. Settings (`.env`)
 
 | Setting | Default | |
 |---|---|---|
@@ -224,4 +268,9 @@ that the detection engine writes for each case stay in English. Translations liv
 | `DAILY_BRIEF_TIME` / `DAILY_BRIEF_LANG` / `DAILY_BRIEF_TELEGRAM` | `09:00` / `en` / `1` | Daily brief schedule |
 | `MW_SCREENSHOTS` | `1` | Full-page screenshots when Playwright is installed |
 | `BULK_MAX_LINKS` / `BULK_PAUSE_SECONDS` | `500` / `1.5` | Links per bulk list, and the pause between links |
+| `DISCOVERY_DISTRICTS` | the 9 Phase 1 districts | Districts to search for (comma separated, English names) |
+| `DISCOVERY_DAILY_QUERIES` / `DISCOVERY_BATCH` / `DISCOVERY_INTERVAL_MINUTES` | `100` / `8` / `30` | Search budget per day, searches per run, minutes between runs |
+| `DISCOVERY_FRESHNESS` | `month` | Only results from the last `week`, `month`, `year` or `any` |
+| `DISCOVERY_MIN_TRIAGE` / `DISCOVERY_OPEN_PER_RUN` | `30` / `25` | Snippet score needed to open a result, and the most opened per run |
+| `DISCOVERY_PROVIDER` / `DISCOVERY_DEMO` / `DISCOVERY_ENABLED` | `auto` / `1` / `1` | Force a provider; allow demo mode; switch discovery off |
 | `MW_SECRET` / `MW_DATA_KEY` | generated | Session signing key and complaint encryption key (otherwise in `backend/data/keys/`) |

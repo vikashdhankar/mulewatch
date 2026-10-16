@@ -59,6 +59,7 @@ export default function Cases() {
           <option value="extension">{t("Chrome extension")}</option>
           <option value="telegram">{t("Telegram channels")}</option>
           <option value="bulk">{t("Bulk link checks")}</option>
+          <option value="discovery">{t("Internet discovery")}</option>
         </select>
         <select value={sp.get("status") || ""} onChange={(e) => set("status", e.target.value)} aria-label={t("Case status")}>
           <option value="">{t("Any status")}</option>

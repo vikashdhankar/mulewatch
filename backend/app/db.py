@@ -276,6 +276,75 @@ class BulkItem(Base):
     checked_at = Column(DateTime, nullable=True)
 
 
+class DiscoveryQuery(Base):
+    """One web search the discovery engine repeats (generated for a district/platform, or added by an officer)."""
+    __tablename__ = "discovery_queries"
+    id = Column(Integer, primary_key=True)
+    text = Column(String(300), unique=True)
+    term = Column(String(120), default="")
+    district = Column(String(40), default="")          # "" = statewide
+    site = Column(String(60), default="")              # "" = whole web
+    kind = Column(String(10), default="auto")          # auto | custom
+    enabled = Column(Boolean, default=True)
+    created_by = Column(String(60), default="")
+    last_run = Column(DateTime, nullable=True)
+    runs = Column(Integer, default=0)
+    results = Column(Integer, default=0)
+    new_hits = Column(Integer, default=0)
+    flagged = Column(Integer, default=0)                # hits that became High/Critical cases
+    last_error = Column(String(300), default="")
+
+
+class DiscoveryRun(Base):
+    __tablename__ = "discovery_runs"
+    id = Column(Integer, primary_key=True)
+    started_at = Column(DateTime, default=datetime.utcnow, index=True)
+    finished_at = Column(DateTime, nullable=True)
+    provider = Column(String(30), default="")
+    trigger = Column(String(60), default="schedule")   # schedule | officer username
+    queries = Column(Integer, default=0)                # searches spent (counts against the daily budget)
+    results = Column(Integer, default=0)
+    new_hits = Column(Integer, default=0)
+    flagged = Column(Integer, default=0)
+    error = Column(String(300), default="")
+
+
+class DiscoveryHit(Base):
+    """A search result. Promising ones are opened and scored like any other post."""
+    __tablename__ = "discovery_hits"
+    id = Column(Integer, primary_key=True)
+    url = Column(String(500), unique=True)
+    title = Column(String(300), default="")
+    snippet = Column(Text, default="")
+    platform = Column(String(40), default="")
+    district = Column(String(40), default="")
+    query_id = Column(Integer, nullable=True)
+    run_id = Column(Integer, nullable=True)
+    provider = Column(String(30), default="")
+    found_at = Column(DateTime, default=datetime.utcnow, index=True)
+    published = Column(String(40), default="")
+    triage = Column(Float, default=0.0)                 # score of the title + snippet alone
+    status = Column(String(16), default="new")          # new | skipped | case | existing | error
+    how = Column(String(20), default="")               # page | snippet  (what the case was built from)
+    post_id = Column(Integer, nullable=True)
+    error = Column(String(300), default="")
+    seen_count = Column(Integer, default=1)
+
+
+class DiscoveredChannel(Base):
+    """A Telegram channel/group named in discovered content, suggested for continuous monitoring."""
+    __tablename__ = "discovered_channels"
+    id = Column(Integer, primary_key=True)
+    handle = Column(String(80), unique=True)
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    mentions = Column(Integer, default=1)
+    districts = Column(JSON, default=list)
+    example_url = Column(String(500), default="")
+    status = Column(String(12), default="suggested")    # suggested | monitored | ignored
+    decided_by = Column(String(60), default="")
+
+
 def _migrate():
     """create_all() never adds columns to an existing table. Add any that are missing so a database
     from an earlier version keeps working (SQLite ALTER TABLE ADD COLUMN)."""

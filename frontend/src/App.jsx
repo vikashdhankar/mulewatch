@@ -18,6 +18,7 @@ import Network from "./pages/Network";
 import Officers from "./pages/Officers";
 import Profile from "./pages/Profile";
 import Sources from "./pages/Sources";
+import Discovery from "./pages/Discovery";
 import Watchlist from "./pages/Watchlist";
 
 // [path, label, icon, minimum role]
@@ -29,6 +30,7 @@ const NAV = [
   ["/complaints", "Victim complaints", "file", "IO"],
   ["/analyze", "Check a post", "scan", "ANALYST"],
   ["/bulk", "Bulk link check", "list", "ANALYST"],
+  ["/discovery", "Internet discovery", "search", "ANALYST"],
   ["/watchlist", "Watchlist", "eye", "ANALYST"],
   ["/sources", "Monitored sources", "globe", "ANALYST"],
   ["/brief", "Daily brief", "doc", "SUPERVISOR"],
@@ -169,6 +171,7 @@ export default function App() {
             <Route path="/officers" element={<Officers />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/discovery" element={<Discovery />} />
             <Route path="/bulk" element={<Bulk />} />
             <Route path="/bulk/:id" element={<Bulk />} />
             <Route path="*" element={<p>{t("Page not found.")} <Link to="/">{t("Back to the command center")}</Link></p>} />

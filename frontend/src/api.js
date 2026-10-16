@@ -83,6 +83,15 @@ export const api = {
   briefSchedule: () => req("/api/brief/schedule"),
   briefSend: (lang) => req("/api/brief/send", json("POST", { lang })),
 
+  // internet discovery
+  discovery: () => req("/api/discovery"),
+  discoveryHits: (p) => req(`/api/discovery/hits?${qs(p)}`),
+  discoveryQueries: (p) => req(`/api/discovery/queries?${qs(p)}`),
+  discoveryAddQuery: (text, district, site) => req("/api/discovery/queries", json("POST", { text, district, site })),
+  discoveryToggleQuery: (id, enabled) => req(`/api/discovery/queries/${id}`, json("PATCH", { enabled })),
+  discoveryRun: () => req("/api/discovery/run", { method: "POST" }),
+  discoveryChannels: () => req("/api/discovery/channels"),
+  discoveryChannel: (id, action) => req(`/api/discovery/channels/${id}`, json("POST", { action })),
   // bulk link checks
   bulkJobs: () => req("/api/bulk"),
   bulkJob: (id) => req(`/api/bulk/${id}`),
