@@ -102,6 +102,7 @@ def detail(s, p: Post) -> dict:
 def list_posts(request: Request, level: str | None = None, platform: str | None = None, category: str | None = None,
                q: str | None = None, cluster: int | None = None, label: str | None = None, source: str | None = None,
                status: str | None = None, assigned: str | None = None, complaints: bool = False,
+               district: str | None = None,
                sort: str = "recent", limit: int = Query(50, le=500), offset: int = 0, u=Depends(current_user)):
     if q:
         audit.log(u, "cases.searched", detail={"q": q[:100]}, ip=ip_of(request))
@@ -127,6 +128,8 @@ def list_posts(request: Request, level: str | None = None, platform: str | None 
             qry = qry.filter(Post.assigned_to.is_(None))
         if complaints:
             qry = qry.filter(Post.complaint_count > 0)
+        if district:
+            qry = qry.filter(Post.jurisdiction.like(f'%"district": "{district.replace(chr(34), "")}"%'))
         if q:
             like = f"%{q}%"
             digits = "".join(c for c in q if c.isdigit())
@@ -305,6 +308,15 @@ def analyze_url(request: Request, url: str = Body(...), save: bool = Body(True),
 
 # ----------------------------------------------------------------------------- stats & trends
 
+def _matched_complaint_amount(s, posts) -> float:
+    """Money lost in complaints linked to any case, counting each complaint once."""
+    from .db import Complaint
+    ids = {c["complaint"] for p in posts for c in (p.complaint_matches or [])}
+    if not ids:
+        return 0
+    return float(sum(a or 0 for (a,) in s.query(Complaint.amount).filter(Complaint.id.in_(ids)).all()))
+
+
 @app.get("/api/stats")
 def stats(u=Depends(current_user)):
     with SessionLocal() as s:
@@ -357,7 +369,7 @@ def stats(u=Depends(current_user)):
             "alerts_unseen": s.query(Alert).filter_by(seen=False).count(),
             "citizen_reports": s.query(Report).count(),
             "complaint_linked": sum(1 for p in posts if p.complaint_count),
-            "complaint_amount": sum(p.complaint_amount or 0 for p in posts if p.complaint_count),
+            "complaint_amount": _matched_complaint_amount(s, posts),
             "reappeared": sum(1 for p in posts if p.repost_of),
             "open_cases": sum(1 for p in posts if (p.status or "NEW") in workflow.OPEN and LEVEL_RANK.get(p.risk_level, 0) >= 2),
             "my_cases": sum(1 for p in posts if p.assigned_to == u.id and (p.status or "NEW") in workflow.OPEN),
@@ -510,7 +522,8 @@ def del_watch(wid: int, request: Request, u=Depends(current_user)):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    """Open without signing in: the login page uses it to show the demo accounts while they exist."""
+    return {"ok": True, "demo_accounts": auth.demo_accounts_active()}
 
 
 @app.get("/api/sources")

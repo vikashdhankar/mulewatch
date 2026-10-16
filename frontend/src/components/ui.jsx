@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { caseId, timeAgo } from "../api";
+import { caseId, inr, STATUS, timeAgo } from "../api";
 
 export function Icon({ name, size = 18 }) {
   const p = {
@@ -19,6 +19,18 @@ export function Icon({ name, size = 18 }) {
     link: <><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
     refresh: <><path d="M20 11a8 8 0 10-2.3 5.7" /><path d="M20 5v6h-6" /></>,
+    map: <><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z" /><path d="M9 4v14M15 6v14" /></>,
+    file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /><circle cx="11" cy="14" r="2.5" /><path d="M13 16l2 2" /></>,
+    doc: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h4" /></>,
+    users: <><circle cx="9" cy="8" r="3" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14c2.8 0 5 2.2 5 5" /></>,
+    user: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></>,
+    lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></>,
+    logout: <><path d="M15 4h4v16h-4" /><path d="M10 8l-4 4 4 4M6 12h10" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    bank: <><path d="M3 10l9-6 9 6" /><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" /></>,
+    pin: <><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></>,
+    download: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></>,
+    repeat: <><path d="M17 3l3 3-3 3" /><path d="M4 11V9a3 3 0 013-3h13" /><path d="M7 21l-3-3 3-3" /><path d="M20 13v2a3 3 0 01-3 3H4" /></>,
   }[name];
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -102,6 +114,7 @@ export function Legend() {
 const ENT_LABEL = {
   phone: "Phone", upi: "UPI ID", telegram: "Telegram", whatsapp: "WhatsApp", handle: "Handle", url: "Link",
   email: "Email", ifsc: "IFSC", card_number: "Card no.", crypto_wallet: "Crypto wallet", price: "Price", domains: "Domain",
+  bank_account: "Account no.",
 };
 const WATCHABLE = new Set(["phone", "upi", "telegram", "whatsapp", "handle", "email", "crypto_wallet", "url", "domains"]);
 
@@ -116,7 +129,7 @@ export function Entities({ entities = {}, onWatch, watched = new Set() }) {
           <dd>{vals.map((v) => (
             <span key={v} className="ent">
               <code>{v}</code>
-              {onWatch && WATCHABLE.has(k) && (
+              {onWatch && WATCHABLE.has(k) && !String(v).includes("•") && (
                 watched.has(String(v).toLowerCase())
                   ? <span className="ent-watched" title="On watchlist"><Icon name="eye" size={14} /></span>
                   : <button className="ent-watch" title="Add to watchlist" onClick={() => onWatch(k === "domains" ? "url" : k, v)}><Icon name="plus" size={14} /></button>
@@ -167,7 +180,11 @@ export function PostRow({ p, fresh, why }) {
           {p.cluster_size > 1 && <span className="chip chip-ring">ring of {p.cluster_size}</span>}
           {p.label === "confirmed" && <span className="chip chip-ok">confirmed</span>}
           {p.label === "false_positive" && <span className="chip">false positive</span>}
-          {p.takedown && <span className="chip chip-td">takedown requested</span>}
+          {p.status && p.status !== "NEW" && <StatusChip status={p.status} />}
+          {p.complaint_count > 0 && <span className="chip chip-comp" title={`${inr(p.complaint_amount)} reported lost`}>{p.complaint_count} complaint{p.complaint_count === 1 ? "" : "s"}</span>}
+          {p.repost_of && <span className="chip chip-td">back after takedown</span>}
+          {p.recruiter_score >= 40 && <span className="chip chip-rec" title="Recruiter priority">recruiter {Math.round(p.recruiter_score)}</span>}
+          {p.district && <span className="chip chip-dist">{p.district}</span>}
         </div>
         <div className="pr-excerpt">{p.excerpt || "(image only)"}</div>
         {why ? <div className="pr-why">{why.join("; ")}</div> :
@@ -175,6 +192,21 @@ export function PostRow({ p, fresh, why }) {
       </div>
       {p.image && <img className="pr-thumb" src={p.image} alt="" loading="lazy" />}
     </Link>
+  );
+}
+
+export function StatusChip({ status }) {
+  return <span className={`chip st st-${status.toLowerCase()}`}>{STATUS[status] || status}</span>;
+}
+
+export function Modal({ title, onClose, children, wide }) {
+  return (
+    <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
+        {children}
+      </div>
+    </div>
   );
 }
 

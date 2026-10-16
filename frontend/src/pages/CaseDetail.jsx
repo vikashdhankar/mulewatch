@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, caseId, timeAgo } from "../api";
+import { api, can, caseId, timeAgo } from "../api";
+import { useAuth } from "../auth";
+import { BanksPanel, ComplaintsPanel, DraftEditor, DraftsPanel, EvidencePanel, JurisdictionPanel, RecruiterCard, RepostBanner, TakedownClock, WorkflowPanel } from "../components/CasePolice";
 import NetworkGraph from "../components/NetworkGraph";
 import { Empty, Entities, GROUP_CLASS, GROUP_LABEL, HighlightedText, Icon, Legend, PostRow, RiskBadge, ScoreBreakdown, ScoreMeter } from "../components/ui";
 import { useLive } from "../live";
@@ -48,12 +50,17 @@ export default function CaseDetail() {
   const [note, setNote] = useState("");
   const [graph, setGraph] = useState(null);
   const [watched, setWatched] = useState(new Set());
+  const [info, setInfo] = useState(null);
+  const [draft, setDraft] = useState(null);       // {kind, bank}
+  const { me } = useAuth();
+  const loadInfo = () => api.police(id).then(setInfo).catch(() => {});
 
   const loadWatch = () => api.watchlist().then((w) => setWatched(new Set(w.map((x) => x.value.toLowerCase()))));
   useEffect(() => {
     api.post(id).then(setP).catch((e) => setErr(e.message));
+    loadInfo();
     loadWatch();
-  }, [id, version]);
+  }, [id, version]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p?.cluster_size > 1) api.graph({ post: id }).then(setGraph);
     else setGraph(null);
@@ -70,7 +77,7 @@ export default function CaseDetail() {
   };
   const takedown = async () => {
     setBusy("td");
-    try { const r = await api.takedown(p.id); setNote(r.ok ? "Takedown requested. The post now shows a Cyber Cell review notice on the forum." : r.message); api.post(id).then(setP); }
+    try { const r = await api.takedown(p.id); setNote(r.ok ? "Removed through the forum's moderation API. The case is now marked Content removed, and MuleWatch will alert if it comes back." : r.message); api.post(id).then(setP); loadInfo(); }
     catch (e) { setNote(e.message); }
     setBusy("");
   };
@@ -96,15 +103,27 @@ export default function CaseDetail() {
         <div className="case-actions">
           <button className={`btn btn-confirm${p.label === "confirmed" ? " on" : ""}`} disabled={!!busy} onClick={() => verdict("confirmed")}><Icon name="check" /> {p.label === "confirmed" ? "Confirmed" : "Confirm fraud"}</button>
           <button className={`btn btn-fp${p.label === "false_positive" ? " on" : ""}`} disabled={!!busy} onClick={() => verdict("false_positive")}><Icon name="x" /> False positive</button>
-          {p.source === "forum" && <button className="btn btn-td" disabled={!!busy || !!p.takedown} onClick={takedown}><Icon name="shield" /> {p.takedown ? "Takedown requested" : "Request takedown"}</button>}
+          {p.source === "forum" && can(me, "IO") && <button className="btn btn-td" disabled={!!busy || !!p.takedown} onClick={takedown} title="Demo: uses the Charcha forum's moderation API"><Icon name="shield" /> {p.takedown ? "Removed on forum" : "Remove via forum API"}</button>}
           <a className="btn" href={`/api/posts/${p.id}/report.pdf`} target="_blank" rel="noreferrer"><Icon name="pdf" /> Evidence report (PDF)</a>
         </div>
       </div>
       {note && <div className="note" role="status">{note}</div>}
+      {info && <RepostBanner info={info} />}
+      {info?.clock && <TakedownClock clock={info.clock} platform={p.platform.split(" · ")[0]} />}
+      {p.masked && <p className="muted small mask-note">Phone and account numbers are partly hidden for your role.</p>}
 
       <div className="case-grid">
-        <div className="case-main"><Evidence p={p} onWatch={watch} watched={watched} /></div>
+        <div className="case-main">
+          {info && <ComplaintsPanel info={info} />}
+          <Evidence p={p} onWatch={watch} watched={watched} />
+          {info && <EvidencePanel pid={p.id} info={info} />}
+        </div>
         <div className="case-side">
+          {info && <WorkflowPanel pid={p.id} info={info} onChange={(x) => { setInfo(x); api.post(id).then(setP); }} />}
+          {info && <DraftsPanel info={info} onOpen={(kind) => setDraft({ kind, bank: info.banks[0]?.bank_code || "?" })} />}
+          {info && <RecruiterCard info={info} />}
+          {info && <JurisdictionPanel info={info} />}
+          {info && <BanksPanel pid={p.id} info={info} onDraft={info.can_act ? (kind, bank) => setDraft({ kind, bank }) : null} />}
           <section className="panel">
             <div className="panel-head"><h2>Linked posts</h2>{p.cluster_id != null && <Link className="more" to={`/network?cluster=${p.cluster_id}`}>Full network</Link>}</div>
             {graph && <NetworkGraph data={graph} height={260} compact onSelect={(n) => n?.post_id && n.post_id !== p.id && nav(`/case/${n.post_id}`)} />}
@@ -121,12 +140,16 @@ export default function CaseDetail() {
             </section>
           )}
           <section className="panel">
-            <div className="panel-head"><h2>Evidence integrity</h2></div>
+            <div className="panel-head"><h2>Record hash</h2></div>
             <p className="small">SHA-256 of the captured post, metadata and image, recorded at capture time:</p>
             <code className="hash">{p.evidence_hash}</code>
           </section>
         </div>
       </div>
+      {draft && info && (
+        <DraftEditor pid={p.id} kind={draft.kind} bank={draft.bank} label={info.drafts.find((d) => d.kind === draft.kind)?.label}
+          onClose={() => setDraft(null)} onExported={() => { loadInfo(); setNote("Draft downloaded. The export is recorded in the case's chain of custody."); }} />
+      )}
     </div>
   );
 }

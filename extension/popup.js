@@ -17,7 +17,8 @@ function render(res) {
   out.append(box);
 }
 
-chrome.storage.sync.get({ api: "http://localhost:8000" }, ({ api }) => { $("api").value = api; });
+chrome.storage.sync.get({ api: "http://localhost:8000", key: "" }, ({ api, key }) => { $("api").value = api; $("key").value = key; });
+$("key").addEventListener("change", () => chrome.storage.sync.set({ key: $("key").value.trim() }));
 chrome.storage.local.get("last", ({ last }) => { if (last) render(last); });
 $("api").addEventListener("change", () => chrome.storage.sync.set({ api: $("api").value.trim() }));
 

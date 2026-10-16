@@ -215,7 +215,7 @@ def build_pack(session, post, report_pdf: bytes, certificate: bytes | None) -> b
         for f in files:
             if f["missing"]:
                 continue
-            arc = f"evidence/{f['kind']}_{f['name']}"
+            arc = "evidence/" + (f["name"] if f["name"].startswith(f["kind"]) else f"{f['kind']}_{f['name']}")
             z.write(DATA_DIR / f["path"], arc)
             manifest["files"].append({"file": arc, "sha256": f["sha256"], "bytes": f["size"], "kind": f["kind"],
                                       "captured_at_utc": f["captured_at"], "unchanged_since_capture": f["intact"],

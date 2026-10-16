@@ -7,7 +7,7 @@
 #   ./run.sh --port 8010         use another port for the command center
 #   ./run.sh --forum-port 8110   use another port for the local forum
 #   ./run.sh --lan               let other devices on the network open the command center
-#                                (it has no login, so the default is this laptop only)
+#                                (everyone signs in; the default is still this laptop only)
 #
 # If the default port is taken by another program, the next free port is used automatically.
 set -euo pipefail

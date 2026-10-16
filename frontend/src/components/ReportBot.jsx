@@ -82,8 +82,10 @@ export function BotPanel() {
             <dd>{bot.alerts_linked
               ? <>On, sent to <b>{bot.alerts_to || "linked chat"}</b>{" "}
                   {bot.alerts_to !== "TELEGRAM_CHAT_ID in .env" &&
-                    <button className="linkish" onClick={async () => { await api.unlinkAlerts(); setTick((x) => x + 1); }}>turn off</button>}</>
-              : <>Off. To get Critical alerts on your phone, send <code className="code-big">/alerts {bot.alert_code}</code> to {bot.username ? <a href={bot.link} target="_blank" rel="noreferrer">@{bot.username}</a> : "the bot"}.</>}
+                    bot.alert_code && <button className="linkish" onClick={async () => { await api.unlinkAlerts(); setTick((x) => x + 1); }}>turn off</button>}</>
+              : bot.alert_code
+                ? <>Off. To get Critical alerts on the unit's phone, send <code className="code-big">/alerts {bot.alert_code}</code> to {bot.username ? <a href={bot.link} target="_blank" rel="noreferrer">@{bot.username}</a> : "the bot"}.</>
+                : <>Off. A supervisor can link the unit's alert chat. For your own case alerts, use <Link to="/profile">My account</Link>.</>}
             </dd>
           </dl>
           <p className="muted small">Reporters get a verdict with safety advice in English and Hindi, and a message when investigators confirm, dismiss or take down what they reported. Their identity isn't shown here.</p>

@@ -2,7 +2,8 @@ import { BarElement, CategoryScale, Chart, Legend, LinearScale, Tooltip } from "
 import { useEffect, useMemo, useState } from "react";
 import { Bar } from "react-chartjs-2";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, caseId, inr } from "../api";
+import { TakedownClock } from "../components/CasePolice";
 import { BotCard } from "../components/ReportBot";
 import { Empty, PostRow } from "../components/ui";
 import { useLive } from "../live";
@@ -22,8 +23,10 @@ export default function Dashboard() {
   const [recent, setRecent] = useState([]);
   const [flaggedOnly, setFlaggedOnly] = useState(true);
   const [err, setErr] = useState("");
+  const [clocks, setClocks] = useState([]);
 
   useEffect(() => {
+    api.clocks().then(setClocks).catch(() => {});
     api.stats().then(setStats).catch((e) => setErr(e.message));
     api.posts({ limit: 40 }).then((d) => setRecent(d.items)).catch(() => {});
   }, [version]);
@@ -50,8 +53,11 @@ export default function Dashboard() {
         <Kpi label="posts and comments scanned" value={stats?.total} to="/cases" />
         <Kpi label="flagged high or critical" value={stats?.flagged} tone="warn" to="/cases?level=Critical,High" />
         <Kpi label="critical" value={stats?.critical} tone="crit" to="/cases?level=Critical" />
+        <Kpi label={stats?.complaint_amount ? `linked to complaints · ${inr(stats.complaint_amount)}` : "linked to victim complaints"}
+          value={stats?.complaint_linked} tone="crit" to="/cases?complaints=1" />
         <Kpi label="seller rings found" value={stats?.rings} tone="tone-ring" to="/network" />
-        <Kpi label="confirmed by investigators" value={stats?.confirmed} tone="ok" to="/cases?label=confirmed" />
+        <Kpi label={stats?.my_cases ? `open cases · ${stats.my_cases} assigned to you` : "open cases to act on"} value={stats?.open_cases}
+          tone="ok" to="/cases?status=NEW,VERIFIED,NOTICE_DRAFTED,NOTICE_SENT&level=Critical,High&sort=recruiter" />
       </div>
 
       <div className="dash-grid">
@@ -70,6 +76,17 @@ export default function Dashboard() {
         </section>
 
         <div className="dash-side">
+          {clocks.length > 0 && (
+            <section className="panel">
+              <div className="panel-head"><h2>Takedown clocks</h2><span className="muted small">{clocks.length} notice{clocks.length === 1 ? "" : "s"} pending</span></div>
+              {clocks.slice(0, 4).map((c) => (
+                <Link key={c.id} to={`/case/${c.id}`} className="clock-link">
+                  <span className="clock-case">{caseId(c.id)} · {c.category}{c.officer && ` · ${c.officer}`}</span>
+                  <TakedownClock clock={c.clock} platform={c.platform} />
+                </Link>
+              ))}
+            </section>
+          )}
           <BotCard />
           <section className="panel">
             <div className="panel-head"><h2>Seller rings</h2><Link to="/network" className="more">Open network</Link></div>

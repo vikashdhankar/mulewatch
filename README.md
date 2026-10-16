@@ -13,6 +13,29 @@ The repo contains two apps:
 
 ---
 
+## For cyber police units (v2)
+
+The problem statement came from the Jaipur Cyber Police, so version 2 adds what a cyber crime unit needs to act on a
+flagged ad, not just see it. Full walkthrough for officers: **[docs/POLICE_WORKFLOW.md](docs/POLICE_WORKFLOW.md)**.
+
+| Feature | What it does |
+|---|---|
+| **Sign-in, roles, audit log** | Analyst / Investigating Officer / Supervisor. Every sign-in, case view, status change, complaint access and export goes into an append-only, hash-chained audit log (the database refuses edits; a broken chain is shown). Analysts see phone and account numbers partly hidden. |
+| **Case workflow** | New → Verified → Notice drafted → Notice sent → Content removed → Linked to FIR (or Closed). Assignment, FIR number, police station, notes. |
+| **3-hour takedown clock** | Starts when the notice is marked sent; warns at 30 min left and alerts when the platform misses the window (IT Rules amendment, Feb 2026). |
+| **Victim complaint matching** | Import the unit's NCRP / 1930 export (CSV/XLSX, any column layout). Ads using the same mobile, UPI ID, account or handle are linked to the complaints and the money lost. Complaint data is encrypted; identifiers are matched through keyed hashes; victim names are never imported. |
+| **Legal drafts (English + Hindi)** | Takedown notice under Sec. 79(3)(b) IT Act for the Sahyog portal, data preservation request, letter to a bank's nodal officer, Section 63 BSA certificate. Edit in the browser, download Word or PDF, watermarked DRAFT. |
+| **Bank and payment-app routing** | IFSC → bank and branch (bundled list of 1.8 lakh branches), UPI handle → app and sponsor bank, so each case shows which bank to write to. |
+| **Court-ready evidence** | Text, page HTML, image and (with Playwright) a full-page screenshot captured with SHA-256 hashes, integrity check, chain of custody, one-click ZIP evidence pack with a draft Section 63 certificate. |
+| **Jurisdiction** | Suggested district and cyber police station from the IFSC branch and places named in the ad; Rajasthan district map. |
+| **Recruiters first** | Ranks bulk recruiters and resellers above people selling a single account. |
+| **Reappearance after takedown** | A new post linked to removed content is flagged and alerted as the same seller coming back. |
+| **Daily brief** | One-page PDF in English or Hindi for the SP/SHO, sent on Telegram every morning. |
+
+Demo sign-in: `analyst`, `io`, `sho` with password `mule@2026` (created on first start; disable them before real use).
+
+---
+
 ## How each expected outcome is met
 
 | Expected outcome | How MuleWatch does it |
@@ -52,7 +75,10 @@ cp .env.example .env        # set FORUM_URL / FORUM_MOD_TOKEN (and optional Tele
 * `./run.sh --local-forum` also starts the forum locally on :8100 — **offline backup** if the venue Wi-Fi or server fails.
 * `./run.sh --reset` clears collected cases (the forum keeps its posts).
 * `./run.sh --port 8010` picks a port (if 8000 is busy, the next free port is used automatically).
-* The command center has no login, so it listens on this laptop only. `./run.sh --lan` exposes it to the local network.
+* Everyone signs in (demo accounts `analyst` / `io` / `sho`, password `mule@2026`). It listens on this laptop only; `./run.sh --lan` opens it to the local network.
+* Manage users: `cd backend && ../.venv/bin/python -m app.users list|add|password|disable` or the **Officers** page.
+* Evidence screenshots (optional): `.venv/bin/pip install playwright && .venv/bin/playwright install chromium`
+* Back up `backend/data/` (database, evidence files) **including `backend/data/keys/`**: without the data key the imported complaints can't be read.
 * Dev mode for the UI: `cd frontend && npm run dev` (proxies the API on :8000).
 * Tests: `cd backend && python -m pytest -q`
 
@@ -144,6 +170,13 @@ Backup lines for questions: the Hindi post (`घर बैठे कमाई �
 | `backend/app/coordination.py` | Ring detection |
 | `backend/app/crawler.py` | Forum + Telegram crawlers, takedown call |
 | `backend/app/report.py` | PDF evidence report |
+| `backend/app/auth.py`, `audit.py`, `security.py` | Sign-in, roles, hash-chained audit log, keys and encryption |
+| `backend/app/workflow.py` | Case lifecycle and takedown clock |
+| `backend/app/complaints.py` | NCRP / 1930 complaint import and matching |
+| `backend/app/legal.py`, `templates/legal/` | Legal drafts (Jinja2 templates you can edit) |
+| `backend/app/banks.py`, `jurisdiction.py`, `refdata/` | IFSC / UPI routing, district suggestion, reference data |
+| `backend/app/evidence.py` | Evidence capture, screenshots, evidence pack |
+| `backend/app/recruiter.py`, `brief.py` | Recruiter priority, daily brief |
 | `frontend/src/` | React command center |
 | `forum/` | Charcha forum + seed data + image generator |
 | `extension/` | Chrome extension (load unpacked) |
@@ -164,5 +197,7 @@ API: `POST /api/analyze/url {"url": "...", "save": true}`
 
 The verdict appears as a notification and a badge on the page, and the case is saved in the command center.
 
+The extension submits posts with a shared key instead of a sign-in: set `MW_INGEST_KEY` in `.env`, restart, and paste the same key into the extension popup. The key only allows submitting posts to check.
+
 ## Responsible use
-MuleWatch is decision support for investigators. Scores and links are leads, not proof; every case needs human verification before action. Only publicly available content is collected.
+MuleWatch is decision support for investigators. Scores and links are leads, not proof; every case needs human verification before action. Only publicly available content is collected. It doesn't identify people beyond what they publicly posted, contact sellers or act on its own: notices and bank letters are drafts for an authorised officer to check and sign, and the legal references in them are a starting point, not legal advice.

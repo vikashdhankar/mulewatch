@@ -1,6 +1,8 @@
 // MuleWatch Field Check — sends selected text / images from any page to the command center.
 const DEFAULT_API = "http://localhost:8000";
 const api = async () => (await chrome.storage.sync.get({ api: DEFAULT_API })).api.replace(/\/$/, "");
+// the command center needs a sign-in; the extension authenticates with the shared ingest key instead
+const keyHeader = async () => ({ "X-MW-Key": (await chrome.storage.sync.get({ key: "" })).key });
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: "mw-text", title: "Check selected text with MuleWatch", contexts: ["selection"] });
@@ -23,7 +25,8 @@ async function analyze({ text = "", imageUrl = "", pageUrl = "", title = "" }) {
       form.append("image", blob, "capture." + (blob.type.split("/")[1] || "png"));
     } catch (e) { /* cross-origin image we can't read: fall back to text only */ }
   }
-  const r = await fetch(base + "/api/analyze", { method: "POST", body: form });
+  const r = await fetch(base + "/api/analyze", { method: "POST", body: form, headers: await keyHeader() });
+  if (r.status === 401) throw new Error("set the extension key (MW_INGEST_KEY) in the popup");
   if (!r.ok) throw new Error(`MuleWatch returned ${r.status}`);
   return r.json();
 }
@@ -31,8 +34,9 @@ async function analyze({ text = "", imageUrl = "", pageUrl = "", title = "" }) {
 // Server fetches the link itself (public pages)
 async function analyzeLink(url) {
   const r = await fetch((await api()) + "/api/analyze/url", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, save: true }),
+    method: "POST", headers: { "Content-Type": "application/json", ...(await keyHeader()) }, body: JSON.stringify({ url, save: true }),
   });
+  if (r.status === 401) throw new Error("set the extension key (MW_INGEST_KEY) in the popup");
   const d = await r.json();
   if (!r.ok) throw new Error(d.detail || `MuleWatch returned ${r.status}`);
   return d;
