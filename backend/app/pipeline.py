@@ -175,7 +175,7 @@ def rescore_all(session, alert: bool = False):
         p.jurisdiction = jurisdiction.suggest(p)
         llm_res = p.llm if p.llm and "score" in p.llm else None
         a = analyze(p.text or "", p.ocr_text or "", stats, llm_res, citizen=p.source == "citizen")
-        extra = [r for r in (p.reasons or []) if r.startswith(("Posted as a comment", "Citizen report:"))]
+        extra = [r for r in (p.reasons or []) if r.startswith(("Posted as a comment", "Citizen report:", "Officer's note with the link:"))]
         _apply_analysis(p, a)
         p.reasons = p.reasons + [r for r in extra if r not in p.reasons]
         p.scores = dict(p.scores, base=a["base_score"], final_done=True)

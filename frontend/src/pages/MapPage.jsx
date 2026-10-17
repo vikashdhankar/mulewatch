@@ -109,7 +109,7 @@ export default function MapPage() {
         color: x.critical ? "#a5162a" : x.cases ? "#c25a00" : "#6f7899",
         fillColor: x.critical ? "#d7263d" : x.cases ? "#ea7317" : "#ffffff", fillOpacity: x.cases ? 0.6 : 0.9,
       });
-      c.bindTooltip(`${tr(x.name)} (${x.name}) — ${tr(x.cases === 1 ? "{n} case" : "{n} cases", { n: x.cases })}`);
+      c.bindTooltip(`${tr(x.name)}${tr(x.name) !== x.name ? ` (${x.name})` : ""} — ${tr(x.cases === 1 ? "{n} case" : "{n} cases", { n: x.cases })}`);
       c.on("click", () => setSel(x));
       c.addTo(layer.current);
     });
@@ -128,7 +128,7 @@ export default function MapPage() {
           {sel ? (
             <>
               <button className="linkish small" onClick={() => setSel(null)}>{t("All districts")}</button>
-              <h3>{t(sel.name)} <span className="muted">{sel.name}</span></h3>
+              <h3>{t(sel.name)}{t(sel.name) !== sel.name && <> <span className="muted">{sel.name}</span></>}</h3>
               <p className="small">{t("{a} cases · {b} critical · {c} open · {d} complaint links", { a: sel.cases, b: sel.critical, c: sel.open, d: sel.complaints })}</p>
               <p className="small">{t("Route to:")} <b>{t("Cyber Police Station, {d}", { d: t(sel.name) })}</b></p>
               {sel.top.map((x) => <Link key={x.id} to={`/case/${x.id}`} className="mini-post"><code>{caseId(x.id)}</code><span>{t(x.category)} · {Math.round(x.risk_score)}</span></Link>)}

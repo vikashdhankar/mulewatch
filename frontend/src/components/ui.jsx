@@ -92,7 +92,7 @@ export function HighlightedText({ text, matches = [], entitySpans = [] }) {
     }
   };
   matches.filter((m) => m.source === "text").forEach((m) => paint(m.start, m.end, GROUP_CLASS[m.group] || "hl-soft", t(GROUP_LABEL[m.group] || "")));
-  entitySpans.forEach((s) => paint(s.start, s.end, "hl-ent", s.kind.replace("_", " ")));
+  entitySpans.forEach((s) => paint(s.start, s.end, "hl-ent", t(ENT_LABEL[s.kind] || s.kind.replace("_", " "))));
   const out = [];
   let i = 0;
   while (i < chars.length) {

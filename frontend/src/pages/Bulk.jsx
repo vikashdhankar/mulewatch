@@ -46,7 +46,7 @@ function NewList({ onCreated }) {
       <div className="panel-head"><h2>{t("New list")}</h2></div>
       <p className="small">{t("Paste the links you collected, one per line. Anything else on the same line (a complaint number, where you found it) is kept as a note.")}</p>
       <textarea className="bulk-text" rows={9} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder={"https://t.me/somechannel/123   from complaint 31209260002\nhttps://www.olx.in/item/…\nhttps://www.facebook.com/groups/…/posts/…"} />
+        placeholder={`https://t.me/somechannel/123   ${t("from complaint 31209260002")}\nhttps://www.olx.in/item/…\nhttps://www.facebook.com/groups/…/posts/…`} />
       <div className="import-row">
         <label>{t("Name this list")}<input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("e.g. Links from Jhotwara patrol, 17 Oct")} /></label>
         <button className="btn btn-primary" disabled={busy || !count} onClick={() => go(() => api.bulkCreate(text, label))}>

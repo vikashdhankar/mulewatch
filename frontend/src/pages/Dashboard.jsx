@@ -44,7 +44,7 @@ export default function Dashboard() {
       .filter((p) => !flaggedOnly || ["Critical", "High", "Medium"].includes(p.risk_level)).slice(0, 25);
   }, [recent, feed, flaggedOnly]);
 
-  if (err) return <Empty title={t("Can't reach the MuleWatch API")}>{err}. Start the backend with ./run.sh and reload.</Empty>;
+  if (err) return <Empty title={t("Can't reach the MuleWatch API")}>{err}. {t("Start the backend with ./run.sh and reload.")}</Empty>;
 
   const tl = stats?.timeline || [];
   return (
@@ -108,7 +108,7 @@ export default function Dashboard() {
             <div className="panel-head"><h2>{t("Risk mix")}</h2></div>
             <div className="mix">
               {["critical", "high", "medium", "low"].map((l) => (
-                <div key={l} className={`mix-seg mix-${l}`} style={{ flexGrow: stats?.[l] || 0 }} title={`${l}: ${stats?.[l]}`} />
+                <div key={l} className={`mix-seg mix-${l}`} style={{ flexGrow: stats?.[l] || 0 }} title={`${t(l[0].toUpperCase() + l.slice(1))}: ${stats?.[l]}`} />
               ))}
             </div>
             <div className="mix-legend">

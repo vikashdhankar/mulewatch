@@ -4,7 +4,8 @@ and each one is fetched and scored in the background like a single "Check a link
 * Links are pulled out of pasted text, a .txt/.csv file or an Excel sheet; text in the same line/row is kept as
   a note (e.g. "from complaint 3120...").
 * One link at a time, with a pause between them, so no site is hammered.
-* A link that is already a case is not fetched again; the item points to the existing case.
+* A link that is already a case is not fetched again; the item points to the existing case, and the note is
+  added to that case.
 * Alerts show in the command center as usual; Telegram gets one summary per list instead of one message
   per link."""
 import io
@@ -137,6 +138,15 @@ def items(s, job_id: int) -> list[dict]:
 
 # ----------------------------------------------------------------------------- worker
 
+NOTE_PREFIX = "Officer's note with the link: "     # pipeline.rescore_all keeps reasons that start with this
+
+
+def _add_note(post: Post, note: str):
+    line = NOTE_PREFIX + note[:200]
+    if note and line not in (post.reasons or []):
+        post.reasons = (post.reasons or []) + [line]
+
+
 def _check_one(item_id: int):
     from .crawler import _parse_dt
     from .fetcher import FetchError, fetch_url
@@ -146,6 +156,7 @@ def _check_one(item_id: int):
         url = it.url
         existing = s.query(Post).filter(Post.url == url).order_by(Post.id.desc()).first()
         if existing:
+            _add_note(existing, it.note)
             it.status, it.post_id, it.checked_at = "existing", existing.id, datetime.utcnow()
             s.commit()
             return
@@ -159,16 +170,17 @@ def _check_one(item_id: int):
     with SessionLocal() as s:
         # the final address after redirects may already be a case
         existing = s.query(Post).filter(Post.url == f["final_url"]).order_by(Post.id.desc()).first()
+        it = s.get(BulkItem, item_id)
         if existing:
-            _finish(item_id, "existing", post_id=existing.id)
+            _add_note(existing, it.note)
+            it.status, it.post_id, it.checked_at = "existing", existing.id, datetime.utcnow()
+            s.commit()
             return
         imgs = f["image_paths"]
-        it = s.get(BulkItem, item_id)
         p = ingest(s, text=f["text"], platform=f["platform"], author=f["author"], url=f["final_url"],
                    image_path=imgs[0] if imgs else "", extra_images=imgs[1:], posted_at=_parse_dt(f["posted_at"]),
                    source="bulk", recompute=False, html=f.get("html", ""))
-        if it.note:
-            p.reasons = (p.reasons or []) + [f"Officer's note with the link: {it.note[:200]}"]
+        _add_note(p, it.note)
         s.commit()
         recompute_all(s, alert=True, push=False)
         it = s.get(BulkItem, item_id)

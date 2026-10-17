@@ -8,6 +8,8 @@ import NetworkGraph from "../components/NetworkGraph";
 import { Empty, Entities, GROUP_CLASS, GROUP_LABEL, HighlightedText, Icon, Legend, PostRow, RiskBadge, ScoreBreakdown, ScoreMeter } from "../components/ui";
 import { useLive } from "../live";
 
+const LANG_NAME = { en: "English", hi: "Hindi", hinglish: "Hinglish" };
+
 export function Evidence({ p, onWatch, watched }) {
   const { t } = useT();
   const imageMatches = (p.matches || []).filter((m) => m.source === "image");
@@ -99,7 +101,7 @@ export default function CaseDetail() {
           </div>
           <h1>{(p.text || p.ocr_text || t("Image post")).split("\n")[0].slice(0, 120)}</h1>
           <p className="case-meta">
-            {p.platform}{p.author && <> · u/{p.author}</>} · {t("posted {ago}", { ago: timeAgo(p.posted_at) })} · {t("language {l}", { l: p.language })}
+            {p.platform}{p.author && <> · u/{p.author}</>} · {t("posted {ago}", { ago: timeAgo(p.posted_at) })} · {t("language {l}", { l: t(LANG_NAME[p.language] || p.language) })}
             {p.url && <> · <a href={p.url} target="_blank" rel="noreferrer">{t("open original")}</a></>}
           </p>
         </div>

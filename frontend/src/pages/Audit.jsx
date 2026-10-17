@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "../i18n";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, caseId, istTime } from "../api";
+import { api, caseId, istTime, ROLE_LABEL } from "../api";
 import { Empty, Icon } from "../components/ui";
 
 const PAGE = 100;
@@ -58,7 +58,7 @@ export default function Audit() {
             <tr key={r.id}>
               <td className="muted small">{r.id}</td>
               <td className="small nowrap">{istTime(r.at)}</td>
-              <td className="small"><b>{r.username}</b><div className="muted">{r.role}</div></td>
+              <td className="small"><b>{r.username}</b><div className="muted">{t(ROLE_LABEL[r.role] || (r.role === "SYSTEM" ? "System" : r.role))}</div></td>
               <td><code>{r.action}</code></td>
               <td>{r.case_id && <Link to={`/case/${r.case_id}`}><code>{caseId(r.case_id)}</code></Link>}</td>
               <td className="small detail">{r.detail}</td>

@@ -52,6 +52,15 @@ def place_mentions(text: str) -> list[str]:
     return found
 
 
+def _say(k: str, **v) -> dict:
+    """A message as an English template plus values, so the interface can show it in Hindi too."""
+    return {"k": k, "v": v}
+
+
+def _text(parts: list[dict]) -> str:
+    return " ".join(p["k"].format(**p["v"]) for p in parts)
+
+
 def suggest(post) -> dict:
     ents = post.entities or {}
     votes: Counter = Counter()
@@ -61,15 +70,17 @@ def suggest(post) -> dict:
         if info["found"]:
             dist = district_for_name(info["district"]) or district_for_name(info["city"])
             in_raj = info["state"].lower().startswith("raj")
-            signals.append({"kind": "ifsc", "value": code,
-                            "detail": f"{info['bank']} branch in {info['district'] or info['city']}, {info['state']}",
+            msg = _say("{bank} branch in {place}, {state}", bank=info["bank"], place=info["district"] or info["city"],
+                       state=info["state"])
+            signals.append({"kind": "ifsc", "value": code, "detail": _text([msg]), "detail_t": msg,
                             "district": dist if in_raj else "", "state": info["state"]})
             if dist and in_raj:
                 votes[dist] += 3
     text = (post.text or "") + "\n" + (post.ocr_text or "") + "\n" + (post.author or "")
     for name, n in Counter(place_mentions(text)).items():
         votes[name] += 2 * min(n, 2)
-        signals.append({"kind": "place", "value": name, "detail": f"Place named in the post ({DISTRICTS[name]['hi']})",
+        msg = _say("Place named in the post ({hi})", hi=DISTRICTS[name]["hi"])
+        signals.append({"kind": "place", "value": name, "detail": _text([msg]), "detail_t": msg,
                         "district": name, "state": "Rajasthan"})
     circles = []
     for ph in list(dict.fromkeys(ents.get("phone", []) + [w for w in ents.get("whatsapp", []) if w.startswith("+91")])):
@@ -77,30 +88,31 @@ def suggest(post) -> dict:
         circle = _SERIES.get(d[:5]) or _SERIES.get(d[:4])
         if circle:
             circles.append(circle)
-            signals.append({"kind": "phone", "value": ph,
-                            "detail": f"Number series first allotted in the {circle} circle (weak: numbers can be ported)",
+            msg = _say("Number series first allotted in the {circle} circle (weak: numbers can be ported)", circle=circle)
+            signals.append({"kind": "phone", "value": ph, "detail": _text([msg]), "detail_t": msg,
                             "district": "", "state": circle})
-    circle_note = ""
+    circle_note = []
     if circles:
         outside = sorted({c for c in circles if c != "Rajasthan"})
         if outside and len(outside) == len(set(circles)):
-            circle_note = (f" Mobile series from outside Rajasthan ({', '.join(outside)}): the seller may be operating "
-                           "from there; consider routing through I4C or that state's cyber cell.")
+            circle_note = [_say("Mobile series from outside Rajasthan ({circles}): the seller may be operating from there; "
+                                "consider routing through I4C or that state's cyber cell.", circles=", ".join(outside))]
         elif "Rajasthan" in circles:
-            circle_note = " Mobile series from the Rajasthan circle."
+            circle_note = [_say("Mobile series from the Rajasthan circle.")]
     if not votes:
         out_of_state = sorted({s["state"] for s in signals if s["kind"] == "ifsc" and not s["district"] and s["state"]})
-        note = ("Account branch outside Rajasthan: " + ", ".join(out_of_state) + ". Route through I4C / that "
-                "state's cyber cell.") if out_of_state else "No district signal in this post."
+        note = [_say("Account branch outside Rajasthan: {states}. Route through I4C / that state's cyber cell.",
+                     states=", ".join(out_of_state)) if out_of_state else _say("No district signal in this post.")]
         return {"district": "", "police_station": "", "confidence": "none", "signals": signals,
-                "circles": sorted(set(circles)), "note": (note + circle_note).strip()}
+                "circles": sorted(set(circles)), "note": _text(note + circle_note), "note_parts": note + circle_note}
     best, score = votes.most_common(1)[0]
     total = sum(votes.values())
     confidence = "medium" if score >= 3 and score / total >= 0.6 else "low"
+    note = [_say("Approximate: based on where the account branch is and places named in the post.")] + circle_note
     return {"district": best, "district_hi": DISTRICTS[best]["hi"],
             "police_station": f"Cyber Police Station, {best}", "confidence": confidence,
             "votes": dict(votes), "signals": signals, "circles": sorted(set(circles)),
-            "note": "Approximate: based on where the account branch is and places named in the post." + circle_note}
+            "note": _text(note), "note_parts": note}
 
 
 def district_points() -> list[dict]:

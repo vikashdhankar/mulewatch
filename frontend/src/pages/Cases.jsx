@@ -36,7 +36,7 @@ export default function Cases() {
       <div className="filters">
         <div className="seg">
           {LEVELS.map((l) => (
-            <button key={l} className={`seg-btn lv-${l.toLowerCase()}${levels.includes(l) ? " on" : ""}`} onClick={() => toggleLevel(l)}>{l}</button>
+            <button key={l} className={`seg-btn lv-${l.toLowerCase()}${levels.includes(l) ? " on" : ""}`} onClick={() => toggleLevel(l)}>{t(l)}</button>
           ))}
         </div>
         <select value={sp.get("category") || ""} onChange={(e) => set("category", e.target.value)} aria-label={t("Category")}>
