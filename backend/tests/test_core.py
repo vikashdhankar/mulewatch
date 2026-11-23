@@ -96,7 +96,7 @@ def test_fetcher_page_parsing_and_ssrf_guard(monkeypatch):
 
     assert platform_for("https://m.facebook.com/groups/1") == "Facebook"
     monkeypatch.delenv("ALLOW_PRIVATE_URLS", raising=False)
-    monkeypatch.setenv("FORUM_URL", "http://103.155.85.18:8100")
+    monkeypatch.setenv("FORUM_URL", "https://charcha.openhippo.in")
     for bad in ("http://127.0.0.1:8000/api/stats", "http://localhost/", "http://192.168.1.10/", "file:///etc/passwd"):
         with pytest.raises(FetchError):
             _check_host(bad)

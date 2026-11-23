@@ -2,7 +2,7 @@
 # One-command setup of the Charcha demo forum on a CyberPanel (or any Ubuntu/AlmaLinux) server.
 #
 #   1. Copy the forum folder to the server (from your laptop):
-#        scp -r ~/Projects/mulewatch/forum ~/Projects/mulewatch/deploy root@103.155.85.18:/opt/charcha-src/
+#        scp -r ~/Projects/mulewatch/forum ~/Projects/mulewatch/deploy root@103.174.103.46:/opt/charcha-src/
 #   2. On the server:
 #        sudo bash /opt/charcha-src/deploy/setup-forum-server.sh
 #

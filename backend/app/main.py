@@ -27,6 +27,14 @@ from .report import build_report
 app = FastAPI(title="MuleWatch", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.middleware("http")(auth.auth_middleware)
+
+
+@app.middleware("http")
+async def no_index(request, call_next):
+    # public demo: keep every page, API response and file out of search engines
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return response
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 app.include_router(auth.router)
 app.include_router(auth.users_router)

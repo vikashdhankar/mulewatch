@@ -30,6 +30,14 @@ MOD_TOKEN = os.getenv("FORUM_MOD_TOKEN", "skit-cybercell-2026")
 SITE_NAME = os.getenv("FORUM_NAME", "Charcha")
 
 app = FastAPI(title="Charcha forum", docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def no_index(request, call_next):
+    # public demo: keep every page, API response and file out of search engines
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return response
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")

@@ -52,7 +52,7 @@ export default function Sources() {
             <option value="telegram">{t("Telegram public channel")}</option>
             <option value="page">{t("Single web page (checked every minute)")}</option>
           </select>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={{ forum: "http://103.155.85.18:8100", telegram: "t.me/channelname", page: t("https://… link to an ad, profile or listing") }[kind]} required />
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={{ forum: "https://charcha.openhippo.in", telegram: "t.me/channelname", page: t("https://… link to an ad, profile or listing") }[kind]} required />
           <button className="btn"><Icon name="plus" /> {t("Add source")}</button>
           <button type="button" className="btn" onClick={async () => { const r = await api.crawl(); setMsg(t("Crawled now: {n} new posts.", { n: r.new })); load(); }}><Icon name="refresh" /> {t("Crawl now")}</button>
         </form>

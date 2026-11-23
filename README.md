@@ -9,7 +9,7 @@ The repo contains two apps:
 | App | What it is | Runs on |
 |---|---|---|
 | **MuleWatch command center** (`backend/` + `frontend/`) | Crawler, detection engine, investigation dashboard | Investigator's laptop — `http://localhost:8000` |
-| **Charcha forum** (`forum/`) | A Reddit-style public community forum with 50 seeded posts, used as the live target for the demo | Public server — `http://103.155.85.18:8100` |
+| **Charcha forum** (`forum/`) | A Reddit-style public community forum with 50 seeded posts, used as the live target for the demo | Public server — `https://charcha.openhippo.in` |
 
 ---
 
@@ -112,7 +112,7 @@ The forum runs as its own systemd service on **port 8100**, so it doesn't touch 
 
 ```bash
 # from your laptop
-scp -r mulewatch/forum mulewatch/deploy root@103.155.85.18:/opt/charcha-src/
+scp -r mulewatch/forum mulewatch/deploy root@103.174.103.46:/opt/charcha-src/
 # on the server
 sudo FORUM_MOD_TOKEN=skit-cybercell-2026 bash /opt/charcha-src/deploy/setup-forum-server.sh
 ```
