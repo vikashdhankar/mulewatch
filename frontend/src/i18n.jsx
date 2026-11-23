@@ -13,6 +13,9 @@ function fill(s, vars) {
   return vars ? s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? `{${k}}`)) : s;
 }
 
+/** The interface language, for helpers outside components. */
+export const currentLang = () => current.lang;
+
 /** Translate outside a component (helpers such as timeAgo). Components should use useT(). */
 export function tr(s, vars) {
   return fill(current.lang === "hi" ? (HI[s] ?? s) : s, vars);

@@ -29,7 +29,8 @@ import requests
 
 from . import audit, jurisdiction
 from .config import LEVEL_RANK, PUBLIC_BASE_URL
-from .db import (DiscoveredChannel, DiscoveryHit, DiscoveryQuery, DiscoveryRun, Post, SessionLocal, Source)
+from .db import (DiscoveredChannel, DiscoveryHit, DiscoveryQuery, DiscoveryRun, Post, SessionLocal, Source, get_setting,
+                 set_setting)
 
 # ----------------------------------------------------------------------------- settings
 
@@ -243,7 +244,10 @@ def pick(s, n: int) -> list[DiscoveryQuery]:
         by_d[q.district].append(q)
     for lst in by_d.values():
         lst.sort(key=lambda q: _priority(q, now), reverse=True)
-    order = sorted(by_d, key=lambda d: _priority(by_d[d][0], now), reverse=True)
+    # on a tie (e.g. every district still has never-run searches) the district searched least goes first, so a run
+    # smaller than the number of districts doesn't keep skipping the same ones
+    runs = {d: sum(q.runs or 0 for q in lst) for d, lst in by_d.items()}
+    order = sorted(by_d, key=lambda d: (-_priority(by_d[d][0], now), runs[d]))
     out, i = [], 0
     while len(out) < n and any(by_d[d] for d in order):
         d = order[i % len(order)]
@@ -350,6 +354,13 @@ def record_results(s, run: DiscoveryRun, q: DiscoveryQuery, prov: str, results: 
     return fresh_ids
 
 
+def _existing(s, hit: DiscoveryHit, post: Post):
+    """The result is already a case: link to it, and still collect the Telegram channels it names."""
+    hit.status, hit.post_id = "existing", post.id
+    _note_channels(s, channels_in(post.text or "", post.ocr_text or ""), hit.district, hit.url)
+    s.commit()
+
+
 def open_hit(hit_id: int) -> int | None:
     """Open one promising result and score it as a post. Returns the post id."""
     from .crawler import _parse_dt
@@ -359,8 +370,7 @@ def open_hit(hit_id: int) -> int | None:
         hit = s.get(DiscoveryHit, hit_id)
         existing = s.query(Post).filter(Post.url == hit.url).order_by(Post.id.desc()).first()
         if existing:
-            hit.status, hit.post_id = "existing", existing.id
-            s.commit()
+            _existing(s, hit, existing)
             return None
         url, title, snippet = hit.url, hit.title, hit.snippet
     page, err = None, ""
@@ -379,8 +389,7 @@ def open_hit(hit_id: int) -> int | None:
         if page:
             existing = s.query(Post).filter(Post.url == page["final_url"]).first()
             if existing:
-                hit.status, hit.post_id = "existing", existing.id
-                s.commit()
+                _existing(s, hit, existing)
                 return None
             imgs = page["image_paths"]
             p = ingest(s, text=page["text"], platform=page["platform"], author=page["author"], url=page["final_url"],
@@ -498,8 +507,25 @@ def run_cycle(trigger: str = "schedule", user=None, max_queries: int | None = No
 
 # ----------------------------------------------------------------------------- scheduler
 
+def backfill_channels():
+    """Once: collect channels from results that were already cases before channels were taken from them."""
+    if get_setting("discovery_channels_backfilled"):
+        return
+    with SessionLocal() as s:
+        for hit in s.query(DiscoveryHit).filter_by(status="existing").all():
+            post = s.get(Post, hit.post_id) if hit.post_id else None
+            if post:
+                _note_channels(s, channels_in(post.text or "", post.ocr_text or ""), hit.district, hit.url)
+        s.commit()
+    set_setting("discovery_channels_backfilled", "1")
+
+
 def _loop():
     time.sleep(20)                               # let the app finish starting
+    try:
+        backfill_channels()
+    except Exception:                            # noqa: BLE001
+        traceback.print_exc()
     while _state["running"]:
         try:
             if provider():

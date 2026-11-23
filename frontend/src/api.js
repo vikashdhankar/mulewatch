@@ -1,4 +1,4 @@
-import { tr } from "./i18n";
+import { currentLang, tr } from "./i18n";
 
 async function req(path, opts = {}) {
   const r = await fetch(path, { credentials: "same-origin", ...opts });
@@ -132,7 +132,9 @@ export function timeAgo(iso) {
 export function istTime(iso) {
   if (!iso) return "";
   const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
-  return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const hi = currentLang() === "hi";
+  return d.toLocaleString(hi ? "hi-IN" : "en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    ...(hi ? { hourCycle: "h23" } : {}) });
 }
 
 export function inr(n) {

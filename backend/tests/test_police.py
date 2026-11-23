@@ -389,3 +389,102 @@ def test_discovery_cycle_turns_results_into_cases(monkeypatch):
         from app.db import Source
         assert s.query(Source).filter(Source.url.like("%jodhpur_kits")).count() == 1
         assert s.query(DiscoveryRun).count() == 2
+
+
+def test_bulk_note_reaches_an_existing_case_and_survives_rescoring(monkeypatch):
+    import time as _t
+    from app import bulk
+    from app.pipeline import rescore_all
+    pid = new_case(KIT_AD, url="http://forum.test/bulk-existing")
+    monkeypatch.setattr(bulk, "PAUSE", 0)
+    io = client("io")
+    r = io.post("/api/bulk", json={"text": "http://forum.test/bulk-existing  from complaint 31209260077"}).json()
+    for _ in range(80):
+        j = io.get(f"/api/bulk/{r['id']}").json()
+        if j["status"] == "done":
+            break
+        _t.sleep(0.25)
+    assert j["items"][0]["status"] == "existing" and j["items"][0]["post"]["id"] == pid
+    note = "Officer's note with the link: from complaint 31209260077"
+    with SessionLocal() as s:
+        assert s.get(Post, pid).reasons.count(note) == 1
+        rescore_all(s)                                     # runs at every startup
+        s.commit()
+    with SessionLocal() as s:
+        assert s.get(Post, pid).reasons.count(note) == 1
+
+
+def test_discovery_pick_reaches_every_district_when_all_are_untried():
+    from app import discovery
+    from app.db import DiscoveryQuery
+    groups = discovery.PHASE1 + [""]
+    qs = [DiscoveryQuery(id=i * 10 + k, text=f"q{i}-{k}", district=d, kind="auto", enabled=True, runs=0)
+          for i, d in enumerate(groups) for k in range(3)]
+
+    class FakeSession:
+        def query(self, _):
+            return self
+
+        def filter_by(self, **_):
+            return self
+
+        def all(self):
+            return list(qs)
+
+    seen = set()
+    for _ in range(2):                                    # two runs of 8 cover all 10 groups
+        for q in discovery.pick(FakeSession(), 8):
+            seen.add(q.district)
+            q.runs = 1
+    assert seen == set(groups)
+
+
+def test_discovery_collects_channels_from_a_result_that_is_already_a_case():
+    from app import discovery
+    from app.db import DiscoveredChannel, DiscoveryHit
+    url = "http://forum.test/p/channel-existing"
+    new_case(KIT_AD.replace("kitwala_jpr", "already_case_kits"), url=url)
+    with SessionLocal() as s:
+        hit = DiscoveryHit(url=url, title="kit", snippet="", district="Jaipur", status="new")
+        s.add(hit)
+        s.commit()
+        hid = hit.id
+    assert discovery.open_hit(hid) is None
+    with SessionLocal() as s:
+        assert s.get(DiscoveryHit, hid).status == "existing"
+        assert s.query(DiscoveredChannel).filter_by(handle="already_case_kits").one().districts == ["Jaipur"]
+    # results marked "existing" by an older version are picked up once at startup
+    url2 = "http://forum.test/p/channel-backfill"
+    pid = new_case(KIT_AD.replace("kitwala_jpr", "older_hit_kits"), url=url2)
+    with SessionLocal() as s:
+        s.add(DiscoveryHit(url=url2, title="kit", district="Kota", status="existing", post_id=pid))
+        s.commit()
+    discovery.backfill_channels()
+    discovery.backfill_channels()
+    with SessionLocal() as s:
+        c = s.query(DiscoveredChannel).filter_by(handle="older_hit_kits").one()
+        assert c.districts == ["Kota"] and (c.mentions or 1) == 1
+
+
+def test_backend_text_shown_in_hindi_has_a_translation():
+    import json
+    from app import brief
+    hi = json.loads((ROOT / "frontend" / "src" / "hi.json").read_text(encoding="utf-8"))
+    posts = [Post(text="Kit ready IFSC SBIN0000691 Jaipur, call 98290 41736", entities={"phone": ["+919829041736"], "ifsc": ["SBIN0000691"]}),
+             Post(text="Kit ready, call 98290 41736", entities={"phone": ["+919829041736"]}),
+             Post(text="Kit ready", entities={})]
+    for p in posts:
+        j = jurisdiction.suggest(p)
+        assert " ".join(m["k"].format(**m["v"]) for m in j["note_parts"]) == j["note"]
+        for m in j["note_parts"] + [s["detail_t"] for s in j["signals"]]:
+            assert m["k"] in hi, m["k"]
+    assert "Playwright is not installed (pip install playwright && playwright install chromium)" in hi
+    # daily brief: categories, districts and dates in Hindi
+    import inspect
+    import re
+    from app.scoring import categorize
+    cats = set(re.findall(r'return "([^"]+)"', inspect.getsource(categorize)))
+    assert len(cats) == 8 and cats <= set(brief.CATEGORY_HI)
+    assert brief._when(datetime(2026, 10, 17, 9, 5), True) == "17 अक्टूबर 2026 09:05"
+    assert brief._district("Jaipur", True) == "जयपुर" and brief._district("Jaipur", False) == "Jaipur"
+    assert brief._district("", True) == ""

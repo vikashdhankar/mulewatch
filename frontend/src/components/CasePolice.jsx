@@ -100,7 +100,7 @@ export function WorkflowPanel({ pid, info, onChange }) {
             </div>
           )}
           <div className="wf-grid">
-            <label>Assigned to
+            <label>{t("Assigned to")}
               {info.can_assign_others ? (
                 <select value={info.assigned_to?.id || ""} disabled={!!busy}
                   onChange={(e) => save({ assigned_to: e.target.value ? Number(e.target.value) : null }, "assign")}>
@@ -191,16 +191,19 @@ export function BanksPanel({ pid, info, onDraft }) {
 export function JurisdictionPanel({ info }) {
   const { t } = useT();
   const j = info.jurisdiction || {};
+  // values are place names (Rajasthan, Jaipur…) or bank names; t() leaves anything it doesn't know as it is
+  const say = (m, fallback) => (m ? t(m.k, Object.fromEntries(Object.entries(m.v).map(([k, v]) => [k, t(String(v))]))) : fallback);
+  const note = j.note_parts ? j.note_parts.map((m) => say(m)).join(" ") : j.note;
   return (
     <section className="panel">
       <div className="panel-head"><h2>{t("Suggested jurisdiction")}</h2>{j.confidence && j.confidence !== "none" && <span className="chip">{t(j.confidence === "medium" ? "medium confidence" : "low confidence")}</span>}</div>
       {j.district ? (
-        <p className="juris"><Icon name="pin" size={16} /><b>{t(j.district)}</b> <span className="muted">({j.district})</span> → {t("Cyber Police Station, {d}", { d: t(j.district) })}</p>
-      ) : <p className="muted small">{j.note || t("No location signal yet.")}</p>}
+        <p className="juris"><Icon name="pin" size={16} /><b>{t(j.district)}</b>{t(j.district) !== j.district && <> <span className="muted">({j.district})</span></>} → {t("Cyber Police Station, {d}", { d: t(j.district) })}</p>
+      ) : <p className="muted small">{note || t("No location signal yet.")}</p>}
       {j.signals?.length > 0 && (
-        <ul className="reasons small">{j.signals.map((s, i) => <li key={i}>{s.detail}{s.kind !== "place" && <> — <code>{s.value}</code></>}</li>)}</ul>
+        <ul className="reasons small">{j.signals.map((s, i) => <li key={i}>{say(s.detail_t, s.detail)}{s.kind !== "place" && <> — <code>{s.value}</code></>}</li>)}</ul>
       )}
-      {j.district && <p className="muted small">{j.note}</p>}
+      {j.district && <p className="muted small">{note}</p>}
     </section>
   );
 }
@@ -231,7 +234,7 @@ export function EvidencePanel({ pid, info }) {
           </div>
         ))}</div>
       ) : <p className="muted small">{t("Captured before evidence capture was added. The record hash is still below.")}</p>}
-      {!info.screenshots?.screenshots && <p className="muted small">{t("Full-page screenshots are off:")} {info.screenshots?.error || t("install Playwright to turn them on")}</p>}
+      {!info.screenshots?.screenshots && <p className="muted small">{t("Full-page screenshots are off:")} {info.screenshots?.error ? t(info.screenshots.error) : t("install Playwright to turn them on")}</p>}
       {can(me, "IO") && (
         <div className="ev-actions">
           <button className="btn" disabled={busy} onClick={pack}><Icon name="download" /> {t("Evidence pack (ZIP)")}</button>

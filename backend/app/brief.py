@@ -53,10 +53,25 @@ T = {
 }
 STATUS_HI = {"NEW": "नया", "VERIFIED": "सत्यापित", "NOTICE_DRAFTED": "सूचना प्रारूप", "NOTICE_SENT": "सूचना भेजी",
              "CONTENT_REMOVED": "सामग्री हटी", "FIR_LINKED": "एफ.आई.आर. से जुड़ा", "CLOSED_NO_ACTION": "बंद"}
+# same wording as the command center's Hindi interface (frontend/scripts/hi_source.py)
+CATEGORY_HI = {"Mule Account Sale": "म्यूल खाता बिक्री", "Account-Holder Recruitment": "खाताधारकों की भर्ती",
+               "Card Sale": "कार्ड बिक्री", "KYC Fraud": "केवाईसी धोखाधड़ी", "Easy-Money Lure": "आसान कमाई का लालच",
+               "Reported Fraud Attempt": "धोखाधड़ी के प्रयास की रिपोर्ट", "Suspicious Financial Ad": "संदिग्ध वित्तीय विज्ञापन",
+               "Benign": "सामान्य"}
+MONTHS_HI = ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"]
 
 
 def _ist(dt):
     return dt + timedelta(hours=5, minutes=30)
+
+
+def _when(dt, hi: bool) -> str:
+    return f"{dt.day} {MONTHS_HI[dt.month - 1]} {dt.year} {dt:%H:%M}" if hi else dt.strftime("%d %b %Y %H:%M")
+
+
+def _district(name: str, hi: bool) -> str:
+    from .jurisdiction import DISTRICTS
+    return DISTRICTS[name]["hi"] if hi and name in DISTRICTS else name
 
 
 def collect(session, start: datetime, end: datetime, district: str | None = None) -> dict:
@@ -147,10 +162,9 @@ def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int
     a, b = _ist(d["start"]), _ist(d["end"])
     title = L["title"]
     if district:
-        from .jurisdiction import DISTRICTS
-        title += f" — {DISTRICTS[district]['hi'] if hi and district in DISTRICTS else district}"
+        title += f" — {_district(district, hi)}"
     story = [P(title, s_title),
-             P(f"{L['period']}: {a.strftime('%d %b %Y %H:%M')} {L['to']} {b.strftime('%d %b %Y %H:%M')} IST"
+             P(f"{L['period']}: {_when(a, hi)} {L['to']} {_when(b, hi)} IST"
                + (" तक" if hi else ""), s_sub),
              Spacer(1, 6)]
     keys = list(d["kpi"])
@@ -173,7 +187,8 @@ def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int
     story.append(P(L["priority"], s_h))
     rows = [[L["c_case"], L["c_score"], L["c_cat"], L["c_dist"], L["c_status"], L["c_officer"]]]
     for c in d["priority"]:
-        rows.append([c["case"], f"{c['score']:.0f}", c["category"], c["district"] or L["unknown"],
+        rows.append([c["case"], f"{c['score']:.0f}", CATEGORY_HI.get(c["category"], c["category"]) if hi else c["category"],
+                     _district(c["district"], hi) or L["unknown"],
                      STATUS_HI.get(c["status"], c["status"]) if hi else workflow.STATUSES.get(c["status"], c["status"]),
                      c["officer"] or L["unassigned"]])
     story.append(table(rows, [22 * mm, 18 * mm, 46 * mm, 30 * mm, 30 * mm, W - 146 * mm]) if len(rows) > 1 else P(L["none"], s_c))
@@ -187,7 +202,7 @@ def build_pdf(session, lang: str = "en", end: datetime | None = None, hours: int
 
     half = (W - 8 * mm) / 2
     ids = [[L["i_id"], L["i_n"]]] + [[k.split(":", 1)[1], n] for k, n in d["identifiers"]]
-    ds = [[L["d_dist"], L["d_n"]]] + [[k or L["unknown"], n] for k, n in d["districts"]]
+    ds = [[L["d_dist"], L["d_n"]]] + [[_district(k, hi) or L["unknown"], n] for k, n in d["districts"]]
     side = Table([[P(L["ids"], s_h), P(L["districts"], s_h)],
                   [table(ids, [half - 16 * mm, 16 * mm]) if len(ids) > 1 else P(L["none"], s_c),
                    table(ds, [half - 16 * mm, 16 * mm]) if len(ds) > 1 else P(L["none"], s_c)]],

@@ -398,6 +398,25 @@ HI = {
         "केवल वही सामग्री मिलती है जिसे सर्च इंजनों ने सार्वजनिक रूप से इंडेक्स किया है; लॉगिन के पीछे का कुछ नहीं खोला जाता। केवल खोज परिणाम से बने प्रकरणों पर {mark} लिखा होता है: कार्यवाही से पहले मूल पेज खोलकर पुष्टि करें।",
     "Today's search budget is used up": "आज का खोज बजट समाप्त हो गया",
     "No search provider is set up": "कोई सर्च प्रदाता सेट नहीं है",
+
+    # ---- text built at run time (keys not seen by check_i18n.py)
+    "Start the backend with ./run.sh and reload.": "./run.sh से बैकएंड चालू करें और पेज दोबारा लोड करें।",
+    "from complaint 31209260002": "शिकायत 31209260002 से", "Hinglish": "हिंग्लिश", "System": "सिस्टम",
+    "Playwright is not installed (pip install playwright && playwright install chromium)":
+        "Playwright इंस्टॉल नहीं है (pip install playwright && playwright install chromium)",
+    # suggested jurisdiction (backend jurisdiction.py sends these as templates)
+    "No district signal in this post.": "इस पोस्ट में ज़िले का कोई संकेत नहीं।",
+    "Approximate: based on where the account branch is and places named in the post.":
+        "अनुमानित: खाते की शाखा और पोस्ट में नामित स्थानों के आधार पर।",
+    "Account branch outside Rajasthan: {states}. Route through I4C / that state's cyber cell.":
+        "खाते की शाखा राजस्थान से बाहर: {states}। I4C / उस राज्य के साइबर सेल के माध्यम से भेजें।",
+    "Mobile series from the Rajasthan circle.": "मोबाइल सीरीज़ राजस्थान सर्किल की है।",
+    "Mobile series from outside Rajasthan ({circles}): the seller may be operating from there; consider routing through I4C or that state's cyber cell.":
+        "मोबाइल सीरीज़ राजस्थान से बाहर की ({circles}): विक्रेता वहीं से सक्रिय हो सकता है; I4C या उस राज्य के साइबर सेल के माध्यम से भेजने पर विचार करें।",
+    "{bank} branch in {place}, {state}": "{bank} की शाखा, {place}, {state}",
+    "Place named in the post ({hi})": "पोस्ट में नामित स्थान ({hi})",
+    "Number series first allotted in the {circle} circle (weak: numbers can be ported)":
+        "नंबर सीरीज़ पहले {circle} सर्किल को आवंटित (कमज़ोर संकेत: नंबर पोर्ट हो सकते हैं)",
 }
 
 if __name__ == "__main__":
