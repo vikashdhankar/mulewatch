@@ -25,7 +25,7 @@ from .pipeline import ingest
 
 CRAWL_INTERVAL = float(os.getenv("CRAWL_INTERVAL", "3"))
 FORUM_URL = os.getenv("FORUM_URL", "http://localhost:8100")
-MOD_TOKEN = os.getenv("FORUM_MOD_TOKEN", "skit-cybercell-2026")
+MOD_TOKEN = os.getenv("FORUM_MOD_TOKEN", "")  # must match the forum server's FORUM_MOD_TOKEN
 UA = {"User-Agent": "MuleWatch-Crawler/1.0 (+research; hackathon demo)"}
 MAX_IMAGE = 6 * 1024 * 1024
 
@@ -262,6 +262,8 @@ def request_takedown(post: Post) -> tuple[bool, str]:
         return False, "Takedown API is only wired for the Charcha forum in this demo."
     parts = post.remote_id.split("#")
     base, pid = parts[0], parts[1]
+    if not MOD_TOKEN:
+        return False, "FORUM_MOD_TOKEN is not set in MuleWatch's .env, so takedowns are switched off."
     try:
         # the forum may have been reseeded since capture: make sure this id is still the same post
         if len(parts) > 2 and (_forum_cards(_get(base + "/new").text).get(pid) or ("",))[0] != parts[2]:

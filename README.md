@@ -106,24 +106,41 @@ Set `ANTHROPIC_API_KEY` in `.env` to add a Claude second opinion (text + image) 
 
 ---
 
-## Forum on the server (CyberPanel)
+## Live demo server
 
-The forum runs as its own systemd service on **port 8100**, so it doesn't touch the websites CyberPanel serves on 80/443.
+The VPS runs three systemd services behind CyberPanel/OpenLiteSpeed (which proxies HTTPS to them) and Cloudflare:
+
+| Site | Service | Local port |
+|---|---|---|
+| https://charcha.openhippo.in (behind Cloudflare Access: sign in with an allowed email) | `charcha` | 8100 |
+| https://mulewatch.openhippo.in | `mulewatch` | 8000 |
+| https://atmlens.openhippo.in | `atmlens` | 8010 |
+
+All three bind to `127.0.0.1` only, so no firewall ports need opening, and every response carries `X-Robots-Tag: noindex`.
+MuleWatch watches the forum locally (`FORUM_URL=http://127.0.0.1:8100`), so Cloudflare Access does not affect it.
+
+* Fresh install on a new server: see [`deploy/new-vps/README.md`](deploy/new-vps/README.md).
+* Update after pushing to GitHub (on the server, as root):
+  ```bash
+  sudo -u apps git -C /srv/apps/mulewatch pull --ff-only
+  rsync -a --delete --exclude data /srv/apps/mulewatch/forum/ /srv/apps/charcha/app/ && chown -R apps: /srv/apps/charcha/app
+  systemctl restart charcha mulewatch
+  ```
+* Logs: `journalctl -u charcha -f` (likewise `mulewatch`, `atmlens`)
+* `FORUM_MOD_TOKEN` must be the same for the forum service and in MuleWatch's `.env`, or takedowns are refused.
+
+### Forum only, on any server
 
 ```bash
 # from your laptop
-scp -r mulewatch/forum mulewatch/deploy root@103.174.103.46:/opt/charcha-src/
+scp -r mulewatch/forum mulewatch/deploy root@<server>:/opt/charcha-src/
 # on the server
-sudo FORUM_MOD_TOKEN=skit-cybercell-2026 bash /opt/charcha-src/deploy/setup-forum-server.sh
+sudo bash /opt/charcha-src/deploy/setup-forum-server.sh   # prints the moderation token to put in MuleWatch's .env
 ```
-Then allow TCP 8100 in **CyberPanel → Security → Firewall** (and in your hosting provider's firewall, if any).
+This publishes the forum on port 8100; open that port in the server's firewall, or put it behind your web server.
 
 * Logins: `demo / demo123`, `judge1`, `judge2`, `judge3` / `demo123`
 * Reset the forum to the 50 original posts: `sudo RESEED=1 bash /opt/charcha-src/deploy/setup-forum-server.sh`
-* Logs: `journalctl -u charcha -f`
-* `FORUM_MOD_TOKEN` must be the same on the server and in the laptop's `.env` for takedowns to work.
-
-The forum is marked as a demo sandbox, sends `noindex`, and blocks crawlers in robots.txt. All users, phone numbers, handles and banks in the seed data are fictional.
 
 ---
 

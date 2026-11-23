@@ -26,7 +26,7 @@ DATA = Path(os.getenv("FORUM_DATA_DIR", BASE / "data"))
 UPLOADS = DATA / "uploads"
 UPLOADS.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA / "charcha.db"
-MOD_TOKEN = os.getenv("FORUM_MOD_TOKEN", "skit-cybercell-2026")
+MOD_TOKEN = os.getenv("FORUM_MOD_TOKEN", "")  # no default: moderation API is off until a token is set
 SITE_NAME = os.getenv("FORUM_NAME", "Charcha")
 
 app = FastAPI(title="Charcha forum", docs_url=None, redoc_url=None)
@@ -360,7 +360,7 @@ def vote(request: Request, pid: int, v: int = Form(...)):
 
 @app.post("/api/moderation/flag/{pid}")
 async def flag(pid: int, request: Request, x_mod_token: str = Header("")):
-    if not secrets.compare_digest(x_mod_token, MOD_TOKEN):
+    if not MOD_TOKEN or not secrets.compare_digest(x_mod_token, MOD_TOKEN):
         raise HTTPException(403, "bad moderation token")
     data = {}
     try:
@@ -378,7 +378,7 @@ async def flag(pid: int, request: Request, x_mod_token: str = Header("")):
 
 @app.post("/api/moderation/flag-comment/{cid}")
 async def flag_comment(cid: int, request: Request, x_mod_token: str = Header("")):
-    if not secrets.compare_digest(x_mod_token, MOD_TOKEN):
+    if not MOD_TOKEN or not secrets.compare_digest(x_mod_token, MOD_TOKEN):
         raise HTTPException(403, "bad moderation token")
     data = {}
     try:
@@ -394,7 +394,7 @@ async def flag_comment(cid: int, request: Request, x_mod_token: str = Header("")
 
 @app.post("/api/moderation/unflag/{pid}")
 def unflag(pid: int, x_mod_token: str = Header("")):
-    if not secrets.compare_digest(x_mod_token, MOD_TOKEN):
+    if not MOD_TOKEN or not secrets.compare_digest(x_mod_token, MOD_TOKEN):
         raise HTTPException(403)
     with db() as c:
         c.execute("UPDATE posts SET flagged=0 WHERE id=?", (pid,))
