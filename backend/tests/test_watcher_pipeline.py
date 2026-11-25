@@ -248,3 +248,13 @@ def test_unmapped_research_class_is_refused():
     with pytest.raises(ValueError):
         SklearnModel(pipe, CFG["classifier"]["class_map"], "x")
     assert pickle.dumps(pipe)
+
+
+def test_cues_are_shown_as_written_in_the_post():
+    from watcher.classifier import as_written, cues
+    text = "एटीएम कार्ड पिन के साथ, call [PHONE]. Full kit ready"
+    assert as_written(text, "एट एम") == "एटीएम"              # the tokenizer splits Devanagari at vowel signs
+    assert as_written(text, "full kit") == "Full kit"
+    assert as_written(text, "kit full") == ""
+    words = cues(text, "unrelated", ["एट एम", "phone", "full kit", "स थ"], 6)
+    assert "एटीएम" in words and "Full kit" in words and "स थ" not in words and "PHONE" not in words

@@ -55,5 +55,5 @@ def replay(path, processor, speed: float = 50.0, max_gap: float = 5.0, push: boo
             heartbeat("replay")
             since = time.monotonic()
     processor.recompute(push=push)
-    heartbeat("replay")
+    heartbeat("replay_done")
     return dict(processor.counts, posts=len(rows))

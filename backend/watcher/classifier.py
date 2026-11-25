@@ -141,10 +141,28 @@ class HFModel:
         return probs, cues(text, cat, [], self.max_cues)
 
 
+_TOKEN = re.compile(r"(?u)\b\w\w+\b")       # scikit-learn's default token pattern
+
+
+def as_written(text: str, term: str) -> str:
+    """The words of the text a model n-gram came from. The tokenizer splits Devanagari at vowel signs
+    ("एटीएम" -> "एट", "एम"), so the n-gram itself can be unreadable; '' if it is not in the text."""
+    words = text.split()
+    frags = [(i, f.lower()) for i, w in enumerate(words) for f in _TOKEN.findall(w)]
+    want = term.lower().split()
+    for k in range(len(frags) - len(want) + 1):
+        if [f for _, f in frags[k:k + len(want)]] == want:
+            span = words[frags[k][0]:frags[k + len(want) - 1][0] + 1]
+            return " ".join(w.strip(".,;:!?()\"'“”‘’।") for w in span)
+    return ""
+
+
 def cues(text: str, category: str, model_words: list[str], n: int) -> list[str]:
-    """Explanation: the model's top words, then lexicon terms of the category, distinct."""
+    """Explanation: lexicon terms of the category, then the model's top words as written in the post, distinct."""
     out: list[str] = []
-    for t in model_words + lexicon_terms(text).get(category, []):
+    readable = [w for w in (as_written(text, t) for t in model_words)
+                if w and not re.search(r"[\d\[\]]", w) and len(w) >= 3]
+    for t in lexicon_terms(text).get(category, []) + readable:       # the category's own terms first
         low = t.lower()
         if len(low) < 3 or any(low == o.lower() or low in o.lower().split() for o in out):
             continue

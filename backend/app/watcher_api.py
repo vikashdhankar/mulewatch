@@ -69,7 +69,7 @@ def health_report(s) -> dict:
         "paused_in_config": bool(cfg.get("paused")),
         "mode": get_setting("watcher_mode") or None, "heartbeat": beat or None,
         "heartbeat_age_s": round(age) if age is not None else None,
-        "running": age is not None and age < 120,
+        "running": age is not None and age < 120 and get_setting("watcher_mode") != "replay_done",
         "queue_lag_s": max((c["overdue_s"] for c in chans), default=0),     # how far polling is behind schedule
         "processing_lag_s": round(lags[len(lags) // 2]) if lags else None,  # published -> processed, median
         "channels": chans,
@@ -118,7 +118,8 @@ def _row(w: WatchPost, alert, decision, case_level=None) -> dict:
             "category_label": CATEGORY_LABEL.get(w.category, w.category), "p": w.prob, "cues": w.cues or [],
             "channel": w.channel, "link": w.link, "district": w.district, "posted_at": _iso(w.posted_at),
             "processed_at": _iso(w.processed_at), "text": (w.masked_text or w.masked_ocr or "")[:400],
-            "breakdown": w.breakdown or {}, "identifiers": len(w.ident_hashes or []), "mode": w.mode,
+            "breakdown": w.breakdown or {}, "identifiers": len(w.ident_hashes or []),
+            "ident_hashes": list(w.ident_hashes or []), "mode": w.mode,
             "decision": _decision_dict(decision)}
 
 
@@ -298,9 +299,10 @@ def evidence_text(s, post: Post, user, lang: str = "en") -> str:
     files = evidence.verify(s, post.id)
     raw = next((f for f in files if f["kind"] == "post_json"), None)
     when = lambda d: d.strftime("%Y-%m-%d %H:%M:%S UTC") if d else "—"  # noqa: E731
+    n = iter(range(1, 10))
     lines = [f"# EVIDENCE PACK — CASE MW-{post.id:05d}",
              f">> Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC",
-             "", "## 1. The post", "| Field | Value |", "|---|---|",
+             "", f"## {next(n)}. The post", "| Field | Value |", "|---|---|",
              f"| Source link | {_safe_line(post.url)} |",
              f"| Platform / channel | {_safe_line(post.platform)} {_safe_line(post.author)} |",
              f"| Published (UTC) | {when(post.posted_at)} |",
@@ -309,19 +311,19 @@ def evidence_text(s, post: Post, user, lang: str = "en") -> str:
              f"| Assessment | {_safe_line(post.category)}, risk {post.risk_score:.0f}/100 ({post.risk_level}) |"]
     if w:
         lines.append(f"| District (approximate) | {w.district or '—'} |")
-    lines += ["", "## 2. Text as observed"] + [_safe_line(x) for x in (post.text or "(none)").splitlines() if x.strip()]
+    lines += ["", f"## {next(n)}. Text as observed"] + [_safe_line(x) for x in (post.text or "(none)").splitlines() if x.strip()]
     if post.ocr_text:
-        lines += ["", "## 3. Text read from the attached image (OCR)"] + \
+        lines += ["", f"## {next(n)}. Text read from the attached image (OCR)"] + \
                  [_safe_line(x) for x in post.ocr_text.splitlines() if x.strip()]
-    lines += ["", "## 4. Why it was flagged"] + [f"- {_safe_line(r)}" for r in (post.reasons or [])[:8]]
-    lines += ["", "## 5. Evidence files and hashes", "| File | Kind | Captured (UTC) | Unchanged | SHA-256 |",
+    lines += ["", f"## {next(n)}. Why it was flagged"] + [f"- {_safe_line(r)}" for r in (post.reasons or [])[:8]]
+    lines += ["", f"## {next(n)}. Evidence files and hashes", "| File | Kind | Captured (UTC) | Intact | SHA-256 |",
               "|---|---|---|---|---|"]
     for f in files:
         lines.append(f"| {f['name']} | {f['kind']} | {(f['captured_at'] or '')[:19].replace('T', ' ')} | "
                      f"{'yes' if f['intact'] else 'NO'} | {f['sha256']} |")
     lines += ["", "To check a file: sha256sum <file> (Windows: certutil -hashfile <file> SHA256). The raw post "
               "(telegram_post.json) is the JSON exactly as received, with its UTC time stamps, link and OCR text.",
-              "", "## 6. Certificate", "The certificate below is a template: complete every highlighted field, "
+              "", f"## {next(n)}. Certificate", "The certificate below is a template: complete every highlighted field, "
               "then sign.", ""]
     return "\n".join(lines) + "\n" + legal.render(s, post, user, "bsa63", lang)
 
