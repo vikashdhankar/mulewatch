@@ -190,10 +190,11 @@ def _research_examples(research_dir: Path, redactor, class_map: dict) -> list[tu
         for p in read_jsonl(posts):
             if p["post_id"] in labels and class_map.get(labels[p["post_id"]], labels[p["post_id"]]) in CATEGORIES:
                 out.append((model_input(p), class_map.get(labels[p["post_id"]], labels[p["post_id"]])))
-    fb_gold, fb_posts = research_dir / "store/annotations/watcher/gold.jsonl", \
+    # officers' decisions on watcher alerts (app.watcher_api.export_feedback)
+    fb_dec, fb_posts = research_dir / "store/annotations/watcher/decisions.jsonl", \
         research_dir / "store/annotations/watcher/posts.jsonl"
-    if fb_gold.exists() and fb_posts.exists():
-        cats = {g["post_id"]: g.get("category") for g in read_jsonl(fb_gold) if g.get("category") in CATEGORIES}
+    if fb_dec.exists() and fb_posts.exists():
+        cats = {g["post_id"]: g.get("category") for g in read_jsonl(fb_dec) if g.get("category") in CATEGORIES}
         out += [(model_input(p), cats[p["post_id"]]) for p in read_jsonl(fb_posts) if p["post_id"] in cats]
     return out
 

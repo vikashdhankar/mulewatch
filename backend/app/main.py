@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image as PILImage
 from sqlalchemy import func
 
-from . import audit, auth, bulk, crawler, discovery, evidence, llm, masking, police_api, reportbot, workflow
+from . import (audit, auth, bulk, crawler, discovery, evidence, llm, masking, police_api, reportbot, watcher_api,
+               workflow)
 from .alerts import telegram_enabled
 from .auth import can, current_user, ip_of, require
 from .config import LEVEL_RANK, MEDIA_DIR, ROOT_DIR
@@ -39,6 +40,7 @@ app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(police_api.router)
+app.include_router(watcher_api.router)
 
 
 @app.on_event("startup")
@@ -451,8 +453,10 @@ def alerts(limit: int = 50, u=Depends(current_user)):
     with SessionLocal() as s:
         rows = s.query(Alert).order_by(Alert.id.desc()).limit(limit).all()
         posts = {p.id: p for p in s.query(Post).filter(Post.id.in_([a.post_id for a in rows])).all()}
+        dec = watcher_api._latest_decisions(s, list(posts))
         return [{"id": a.id, "post_id": a.post_id, "level": a.level, "reason": a.reason, "seen": a.seen,
                  "channel": a.channel, "delivered": a.delivered, "created_at": a.created_at.isoformat(),
+                 "decision": watcher_api._decision_dict(dec.get(a.post_id)),
                  "post": masking.apply(summary(posts[a.post_id]), u) if a.post_id in posts else None} for a in rows]
 
 
