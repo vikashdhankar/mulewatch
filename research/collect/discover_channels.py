@@ -19,6 +19,21 @@ and a label: likely_fraud (score >= likely_fraud), likely_legit (score < likely_
 Telegram-verified channel), otherwise unclear. Channels found by the legit keywords are negatives:
 they are labelled likely_legit unless their score says otherwise, in which case they are unclear.
 
+Also per candidate:
+  geo_score        share of sampled posts (with text) naming a Rajasthan district or place (English,
+                   Hindi and common spellings) or a Rajasthan PIN code (30xxxx-34xxxx, amounts excluded);
+                   rajasthan_focus = geo_score >= scoring.rajasthan_focus (0.2); top_district
+  category         payout_mule, account_sale, usdt_p2p, crypto_investment_scam, task_job_scam,
+                   legit_finance or unrelated, from cue words; 'unclear' when no category clearly leads
+  awareness_share  share of posts with awareness wording (cyber-police / bank warning channels)
+
+Seeds come from config/discovery_seeds.yaml and, if present, store/discovery_seeds.yaml (git-ignored;
+entries may carry a 'group', which is kept as seed_group).
+
+Stop rule: fraud keywords run until there are --target-fraud likely_fraud candidates and
+--target-rajasthan of them are rajasthan_focus; once the first is met only the Rajasthan keywords
+keep running. Legit keywords run until --legit-target candidates are categorised legit_finance.
+
 Channel titles are written with identifiers masked. Post text and contact values are never printed,
 logged or written.
 
@@ -40,6 +55,7 @@ from pathlib import Path
 
 import yaml
 
+from collect.rajasthan import places_in
 from collect.telegram_public import RateLimiter, load_config as load_channels_config, make_client, normalize_username
 from common.io import load_env
 from common.lang import HINGLISH_MARKERS
@@ -68,6 +84,13 @@ CUES: dict[str, list[str]] = {
                      "sim", "ifsc", "खाता", "खाते", "अकाउंट", "बैंक", "एटीएम", "कार्ड", "सिम"],
     "lure": ["ghar baithe", "part time", "work from home", "daily income", "task", "kamai", "kamao", "earn",
              "earning", "घर बैठे", "पार्ट टाइम", "कमाई", "कमाएं"],
+    # USDT / P2P rails used to cash out mule money
+    "crypto": ["p2p", "f2f", "binance", "tether", "trc20", "usdt seller", "usdt buyer", "inr to usdt", "usdt to inr",
+               "usdt cash", "crypto exchange", "यूएसडीटी"],
+    # investment / trading scams
+    "investment_scam": ["double money", "100% profit", "daily return", "daily profit", "guaranteed profit",
+                        "guaranteed return", "investment plan", "forex signal", "forex signals", "vip signal",
+                        "trading profit", "profit daily", "crypto investment", "पैसा डबल", "दोगुना", "गारंटीड"],
     # awareness / official wording: a cyber-police or bank channel warning about mule accounts
     "awareness": ["beware", "cyber crime", "cybercrime", "1930", "awareness", "never share", "report fraud",
                   "cyber dost", "sanchar saathi", "cybercrime.gov.in", "sachet", "सावधान", "जागरूक",
@@ -76,7 +99,8 @@ CUES: dict[str, list[str]] = {
     "finance_news": ["nifty", "sensex", "mutual fund", "ipo", "repo rate", "interest rate", "monetary policy",
                      "circular", "press release", "निफ्टी", "सेंसेक्स", "म्यूचुअल फंड"],
 }
-WEIGHTS = {"strong": 3.0, "sale": 2.0, "bank": 1.0, "lure": 1.0, "awareness": -3.0, "finance_news": -1.0}
+WEIGHTS = {"strong": 3.0, "sale": 2.0, "bank": 1.0, "lure": 1.0, "crypto": 2.0, "investment_scam": 3.0,
+           "awareness": -3.0, "finance_news": -1.0}
 
 
 def _rx(term: str) -> re.Pattern:
@@ -99,6 +123,66 @@ def cue_score(text: str, cap: float = 10.0) -> float:
     hits = {(g, t) for g, t in hits if not any(t != o and t in o for o in terms)}
     s = sum(WEIGHTS[g] for g, _ in hits)
     return max(min(s, cap), -cap)
+
+
+# --------------------------------------------------------------------------- categories
+
+CATEGORY_TERMS: dict[str, list[str]] = {
+    "payout_mule": ["payout", "payin", "pay-in", "pay in", "gaming", "betting", "casino", "per transaction",
+                    "commission per", "running account", "settlement", "fund transfer", "escrow", "upi load",
+                    "payment gateway", "gateway account", "merchant account", "pg account", "पेआउट"],
+    "account_sale": ["kit", "kits", "full kit", "passbook", "net banking", "netbanking", "corporate account",
+                     "current account", "savings account", "saving account", "firm account", "old account",
+                     "fresh account", "account sale", "account sell", "on rent", "for rent", "kiraye", "kiraya",
+                     "khata", "atm card", "debit card", "sim card", "cheque book", "किराये", "किराए", "करंट अकाउंट",
+                     "खाता", "पासबुक", "किट"],
+    "usdt_p2p": ["usdt", "p2p", "f2f", "binance", "tether", "trc20", "erc20", "inr to usdt", "usdt to inr",
+                 "usdt rate", "buy usdt", "sell usdt", "crypto exchange", "usdt cash", "यूएसडीटी"],
+    "crypto_investment_scam": ["double money", "100% profit", "daily return", "daily profit", "guaranteed profit",
+                               "guaranteed return", "investment plan", "forex signal", "forex signals",
+                               "vip signal", "trading profit", "profit daily", "crypto investment", "roi",
+                               "पैसा डबल", "दोगुना", "मुनाफा", "गारंटीड"],
+    "task_job_scam": ["part time", "part-time", "task", "tasks", "work from home", "daily payment", "daily income",
+                      "ghar baithe", "kamai", "like videos", "youtube like", "review task", "prepaid task", "job",
+                      "jobs", "salary", "पार्ट टाइम", "घर बैठे", "कमाई", "जॉब", "नौकरी"],
+    "legit_finance": ["nifty", "sensex", "mutual fund", "ipo", "repo rate", "interest rate", "monetary policy",
+                      "rbi", "sebi", "circular", "press release", "stock market", "share market", "fd rates",
+                      "fixed deposit", "personal finance", "budget", "inflation", "gdp", "dividend", "quarterly results",
+                      "निफ्टी", "सेंसेक्स", "शेयर बाजार", "म्यूचुअल फंड", "ब्याज दर"],
+}
+FRAUD_CATEGORIES = ["payout_mule", "account_sale", "usdt_p2p", "crypto_investment_scam", "task_job_scam"]
+_CAT_RX = [(cat, t, _rx(t)) for cat, terms in CATEGORY_TERMS.items() for t in terms]
+_AWARE_RX = [_rx(t) for t in CUES["awareness"]]
+
+
+def category_hits(text: str) -> Counter:
+    """Distinct category terms in one text (a longer term hides a shorter one inside it)."""
+    if not text:
+        return Counter()
+    hits = {(cat, t) for cat, t, rx in _CAT_RX if rx.search(text)}
+    terms = {t for _, t in hits}
+    return Counter(cat for cat, t in hits if not any(t != o and t in o for o in terms))
+
+
+def decide_category(hits: Counter, label: str, verified: bool, posts: int) -> str:
+    """Rule-based category from cue counts summed over the sampled posts and the title."""
+    if posts == 0:
+        return "unclear"
+    fraud = sorted(((hits[c], c) for c in FRAUD_CATEGORIES), reverse=True)
+    (top_n, top), (second_n, _) = fraud[0], fraud[1]
+    fraud_total = sum(n for n, _ in fraud)
+    legit_n = hits["legit_finance"]
+    if label == "likely_legit":
+        if verified or (legit_n >= 3 and legit_n > fraud_total):
+            return "legit_finance"
+        if fraud_total <= 2 and legit_n < 3:
+            return "unrelated"
+        return "unclear"
+    if top_n >= 3 and top_n >= 1.5 * second_n:          # clearly ahead of the runner-up
+        return top
+    if label == "unclear" and legit_n >= 3 and legit_n > fraud_total:
+        return "legit_finance"
+    return "unclear"
 
 
 # count-only: the probe's salt is irrelevant because the hashes are never kept
@@ -159,6 +243,13 @@ class Candidate:
     score: float = 0.0
     lang_mix: dict = field(default_factory=dict)
     label: str = "unclear"
+    category: str = "unclear"
+    geo_score: float = 0.0
+    rajasthan_focus: bool = False
+    districts: dict = field(default_factory=dict)
+    top_district: str = ""
+    awareness_share: float = 0.0
+    seed_group: str = ""
     error: str = ""
 
 
@@ -212,6 +303,22 @@ def score_candidate(c: Candidate, texts: list[str], dates: list[datetime], s: di
     c.lang_mix = lang_mix(with_text)
     c.label = label_for(c, s)
 
+    places = [places_in(t) for t in with_text]
+    district_counts = Counter(d for ps in places for d in ps)
+    district_counts.update(places_in(c.title))
+    c.geo_score = round(sum(bool(ps) for ps in places) / len(with_text), 3) if with_text else 0.0
+    c.rajasthan_focus = c.geo_score >= s.get("rajasthan_focus", 0.2)
+    c.districts = dict(district_counts.most_common(3))
+    named = [d for d, _ in district_counts.most_common() if d not in ("rajasthan", "rajasthan_pin")]
+    c.top_district = named[0] if named else (district_counts.most_common(1)[0][0] if district_counts else "")
+
+    hits = Counter()
+    for t in with_text + [c.title]:
+        hits.update(category_hits(t))
+    c.category = decide_category(hits, c.label, c.verified, len(with_text))
+    c.awareness_share = round(sum(any(rx.search(t) for rx in _AWARE_RX) for t in with_text) / len(with_text), 3) \
+        if with_text else 0.0
+
 
 # --------------------------------------------------------------------------- telegram calls
 
@@ -259,13 +366,15 @@ class Discoverer:
         new = [c for c in (self._add(ch, f"keyword '{q}'", role) for ch in chats) if c]
         return len(chats), new
 
-    async def seed(self, username: str) -> Candidate | None:
+    async def seed(self, username: str, group: str = "") -> Candidate | None:
         try:
             entity = await self._call(self.client.get_entity, username)
         except Exception as e:                      # unknown / deleted / private username
             log.warning("seed %s: %s", username, type(e).__name__)
             return None
-        c = self._add(entity, "seed list", "seed")
+        c = self._add(entity, "seed list" + (f" (group: {group})" if group else ""), "seed")
+        if c is not None:
+            c.seed_group = group
         if c is None and entity.id not in self.by_id:
             log.warning("seed %s: not a public channel or supergroup", username)
         return c
@@ -287,21 +396,48 @@ class Discoverer:
             c.error = type(e).__name__
             c.label = "unclear"
             log.warning("%s: %s", c.username, c.error)
-        log.debug("%-32s %-9s %-12s score=%5.2f contacts=%.0f%% posts=%d", c.username, c.kind, c.label, c.score,
-                  100 * c.contact_share, c.posts_sampled)
+        log.debug("%-32s %-9s %-12s %-22s score=%5.2f contacts=%.0f%% geo=%.2f posts=%d", c.username, c.kind,
+                  c.label, c.category, c.score, 100 * c.contact_share, c.geo_score, c.posts_sampled)
 
-    def count(self, label: str, role: str | None = None) -> int:
-        return sum(c.label == label and (role is None or c.role == role) for c in self.by_id.values())
+    def count(self, label: str | None = None, role: str | None = None, category: str | None = None,
+              rajasthan: bool = False) -> int:
+        return sum((label is None or c.label == label) and (role is None or c.role == role)
+                   and (category is None or c.category == category) and (not rajasthan or c.rajasthan_focus)
+                   for c in self.by_id.values())
 
 
 # --------------------------------------------------------------------------- config / output
 
-def load_discovery_config(keywords_path, seeds_path) -> dict:
+def load_seeds(*paths) -> list[tuple[str, str]]:
+    """[(username, group)] from seed files; entries are usernames or {username, group}. First file wins
+    on duplicates, except that a later file can add a group to a seed that had none."""
+    out: dict[str, list] = {}
+    for path in paths:
+        if not path or not Path(path).exists():
+            continue
+        for item in (yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}).get("seeds", []) or []:
+            item = {"username": item} if isinstance(item, str) else dict(item)
+            name = normalize_username(str(item.get("username", "")))
+            group = str(item.get("group") or "")
+            key = name.lower()
+            if key not in out:
+                out[key] = [name, group]
+            elif group and not out[key][1]:
+                out[key][1] = group
+    return [tuple(v) for v in out.values()]
+
+
+def expand_rajasthan(spec: dict) -> list[tuple[str, str]]:
+    kws = [f"{p} {s}" for p in spec.get("places", []) for s in spec.get("suffixes", [])]
+    kws += [f"{p} {s}" for p in spec.get("hindi_places", []) for s in spec.get("hindi_suffixes", [])]
+    return [("rajasthan", k) for k in kws]
+
+
+def load_discovery_config(keywords_path, seeds_path, extra_seeds_path=None) -> dict:
     kw = yaml.safe_load(Path(keywords_path).read_text(encoding="utf-8")) or {}
-    seeds = (yaml.safe_load(Path(seeds_path).read_text(encoding="utf-8")) or {}).get("seeds", []) \
-        if seeds_path and Path(seeds_path).exists() else []
+    seeds = load_seeds(seeds_path, extra_seeds_path)
     scoring = {"posts_per_channel": 30, "contact_weight": 4.0, "title_weight": 0.5, "post_cap": 10.0,
-               "likely_fraud": 5.0, "likely_legit": 2.0, **(kw.get("scoring") or {})}
+               "likely_fraud": 5.0, "likely_legit": 2.0, "rajasthan_focus": 0.2, **(kw.get("scoring") or {})}
     if scoring["likely_legit"] > scoring["likely_fraud"]:
         raise ValueError("scoring.likely_legit must not be above scoring.likely_fraud")
 
@@ -310,18 +446,27 @@ def load_discovery_config(keywords_path, seeds_path) -> dict:
         for group, terms in (kw.get(section) or {}).items():
             out += [(group, t.strip()) for t in terms or [] if t and t.strip()]
         return out
-    return {"fraud": flat("fraud"), "legit": flat("legit"), "seeds": [normalize_username(s) for s in seeds],
+    fraud = flat("fraud") + expand_rajasthan(kw.get("rajasthan") or {})
+    seen, uniq = set(), []
+    for g, k in fraud:                              # "usdt payout" is in two groups: search it once
+        if k.lower() not in seen:
+            seen.add(k.lower())
+            uniq.append((g, k))
+    return {"fraud": uniq, "legit": flat("legit"), "seeds": seeds,
             "settings": {**scoring, "search_limit": int(kw.get("search_limit", 100))}}
 
 
 def _entry(c: Candidate, today: str) -> dict:
     first = c.found_by[0]
     return {"username": c.username, "title": c.title, "approved": False, "label": c.label, "score": c.score,
+            "category": c.category, "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
+            "top_district": c.top_district or None, "districts": c.districts,
+            "awareness_share": c.awareness_share,
             "subscribers": c.subscribers, "last_post": c.last_post or None, "lang_mix": c.lang_mix,
             "kind": c.kind, "verified": c.verified, "tg_scam_flag": c.tg_scam_flag,
             "contact_share": c.contact_share, "posts_sampled": c.posts_sampled,
             "found_by": c.found_by, "reason": f"auto-discovered {today} by {first}",
-            **({"error": c.error} if c.error else {})}
+            **({"seed_group": c.seed_group} if c.seed_group else {}), **({"error": c.error} if c.error else {})}
 
 
 def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], settings: dict,
@@ -332,7 +477,7 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
            "note": "Candidates for human review. Set approved: true only after checking a channel by hand. "
                    "The collector reads only approved likely_fraud / likely_legit broadcast channels.",
            "scoring": {k: settings[k] for k in ("posts_per_channel", "contact_weight", "title_weight",
-                                                "likely_fraud", "likely_legit")},
+                                                "likely_fraud", "likely_legit", "rajasthan_focus")},
            "channels": [_entry(c, today) for c in cands],
            "settings": collector_settings}
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -340,20 +485,22 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
     tmp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=120), encoding="utf-8")
     tmp.replace(out)
 
-    cols = ["username", "title", "kind", "label", "score", "cue_score", "contact_share", "subscribers", "last_post",
-            "posts_sampled", "devanagari", "roman_hindi", "english", "verified", "tg_scam_flag", "role", "found_by",
-            "error", "approved"]
+    cols = ["username", "title", "subscribers", "last_post", "score", "category", "rajasthan_focus", "geo_score",
+            "lang_mix", "found_by", "label", "kind", "approved"]
     with open(out.with_suffix(".csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
         for c in cands:
-            w.writerow({"username": c.username, "title": c.title, "kind": c.kind, "label": c.label, "score": c.score,
-                        "cue_score": c.cue_score, "contact_share": c.contact_share, "subscribers": c.subscribers,
-                        "last_post": c.last_post, "posts_sampled": c.posts_sampled, **c.lang_mix,
-                        "verified": c.verified, "tg_scam_flag": c.tg_scam_flag, "role": c.role,
-                        "found_by": "; ".join(c.found_by), "error": c.error, "approved": False})
+            mix = c.lang_mix or {}
+            w.writerow({"username": c.username, "title": c.title, "subscribers": c.subscribers,
+                        "last_post": c.last_post, "score": c.score, "category": c.category,
+                        "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
+                        "lang_mix": f"dev={mix.get('devanagari', 0)};rom={mix.get('roman_hindi', 0)};"
+                                    f"en={mix.get('english', 0)}",
+                        "found_by": "; ".join(c.found_by), "label": c.label, "kind": c.kind, "approved": False})
     with open(out.with_name(out.stem + ".keywords.csv"), "w", newline="", encoding="utf-8") as f:
-        cols = ["role", "group", "keyword", "results", "new_public", "likely_fraud", "unclear", "likely_legit"]
+        cols = ["role", "group", "keyword", "results", "new_public", "likely_fraud", "unclear", "likely_legit",
+                "rajasthan_focus", "legit_finance"]
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
         w.writerows(keyword_rows)
@@ -362,7 +509,8 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
 # --------------------------------------------------------------------------- run
 
 async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_target: int = 20,
-                   rpm: float = 20, collector_settings: dict | None = None, sleep=asyncio.sleep) -> dict:
+                   rpm: float = 20, collector_settings: dict | None = None, sleep=asyncio.sleep,
+                   target_rajasthan: int = 25) -> dict:
     s = cfg["settings"]
     d = Discoverer(client, s, RateLimiter(rpm, sleep=sleep), sleep=sleep)
     rows: list[dict] = []
@@ -371,20 +519,28 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
     def row(role, group, kw, n_results, new):
         labels = Counter(c.label for c in new)
         rows.append({"role": role, "group": group, "keyword": kw, "results": n_results, "new_public": len(new),
-                     **{k: labels.get(k, 0) for k in ("likely_fraud", "unclear", "likely_legit")}})
+                     **{k: labels.get(k, 0) for k in ("likely_fraud", "unclear", "likely_legit")},
+                     "rajasthan_focus": sum(c.rajasthan_focus for c in new),
+                     "legit_finance": sum(c.category == "legit_finance" for c in new)})
         write_outputs(out, list(d.by_id.values()), rows, s, collector_settings)
 
-    seeds = [c for c in [await d.seed(u) for u in cfg["seeds"]] if c]
+    seeds = [c for c in [await d.seed(u, g) for u, g in cfg["seeds"]] if c]
     for c in seeds:
         await d.inspect(c)
     row("seed", "seeds", "(seed list)", len(cfg["seeds"]), seeds)
 
-    stopped = False
+    stopped, skipped = False, 0
+    fraud_done = lambda: d.count("likely_fraud") >= target_fraud  # noqa: E731
+    raj_done = lambda: d.count("likely_fraud", rajasthan=True) >= target_rajasthan  # noqa: E731
     for group, kw in cfg["fraud"]:
-        if d.count("likely_fraud") >= target_fraud:
+        if fraud_done() and raj_done():
             stopped = True
-            log.info("reached %d likely_fraud candidates; stopping fraud keywords", target_fraud)
+            log.info("reached %d likely_fraud (%d Rajasthan-focused); stopping fraud keywords",
+                     d.count("likely_fraud"), d.count("likely_fraud", rajasthan=True))
             break
+        if fraud_done() and group != "rajasthan":   # only Rajasthan searches still help
+            skipped += 1
+            continue
         n, new = await d.search(kw, "fraud")
         for c in new:
             await d.inspect(c)
@@ -393,34 +549,57 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
         row("fraud", group, kw, n, new)
 
     for group, kw in cfg["legit"]:
-        if d.count("likely_legit", "legit") >= legit_target:
+        if d.count(category="legit_finance") >= legit_target:
             break
         n, new = await d.search(kw, "legit")
         for c in new:
             await d.inspect(c)
-        log.info("[legit] %-30s results=%3d new=%3d  -> legit %d / unclear %d", kw, n, len(new),
-                 sum(c.label == "likely_legit" for c in new), sum(c.label == "unclear" for c in new))
+        log.info("[legit] %-30s results=%3d new=%3d  -> legit_finance %d", kw, n, len(new),
+                 sum(c.category == "legit_finance" for c in new))
         row("legit", group, kw, n, new)
 
     write_outputs(out, list(d.by_id.values()), rows, s, collector_settings)
-    return {"labels": Counter(c.label for c in d.by_id.values()), "keywords": rows, "requests": d.requests,
-            "stopped_at_target": stopped, "candidates": len(d.by_id)}
+    cands = list(d.by_id.values())
+    fraud = [c for c in cands if c.label == "likely_fraud"]
+    return {"labels": Counter(c.label for c in cands), "categories": Counter(c.category for c in cands),
+            "districts": Counter(c.top_district for c in cands if c.rajasthan_focus),
+            "districts_fraud": Counter(c.top_district for c in fraud if c.rajasthan_focus),
+            "rajasthan_fraud": sum(c.rajasthan_focus for c in fraud),
+            "legit_finance": sum(c.category == "legit_finance" for c in cands),
+            "keywords": rows, "requests": d.requests, "stopped_at_target": stopped, "skipped_keywords": skipped,
+            "candidates": len(cands), "targets": {"fraud": target_fraud, "rajasthan": target_rajasthan,
+                                                   "legit_finance": legit_target}}
 
 
 def print_report(result: dict, out: Path, stream=sys.stdout) -> None:
     p = lambda *a: print(*a, file=stream)  # noqa: E731
     p(f"\n{result['candidates']} candidates, {result['requests']} Telegram requests"
       + (" (stopped: likely_fraud target reached)" if result["stopped_at_target"] else " (keywords exhausted)"))
+    t = result.get("targets", {})
+    p("\nper label:")
     for k in ("likely_fraud", "unclear", "likely_legit"):
-        p(f"  {k:13s} {result['labels'].get(k, 0)}")
-    p(f"\n{'role':6s} {'keyword':34s} {'results':>7s} {'new':>4s} {'fraud':>5s} {'uncl':>5s} {'legit':>5s}")
+        p(f"  {k:24s} {result['labels'].get(k, 0)}")
+    p(f"\ntargets: likely_fraud {result['labels'].get('likely_fraud', 0)}/{t.get('fraud')}, "
+      f"of them rajasthan_focus {result.get('rajasthan_fraud', 0)}/{t.get('rajasthan')}, "
+      f"legit_finance {result.get('legit_finance', 0)}/{t.get('legit_finance')}")
+    p("\nper category:")
+    for k, n in sorted(result.get("categories", {}).items(), key=lambda kv: -kv[1]):
+        p(f"  {k:24s} {n}")
+    p("\nper district (rajasthan_focus channels, by most-named place; likely_fraud in brackets):")
+    for k, n in sorted(result.get("districts", {}).items(), key=lambda kv: -kv[1]):
+        p(f"  {k or '-':24s} {n} ({result.get('districts_fraud', {}).get(k, 0)})")
+    if result.get("skipped_keywords"):
+        p(f"\n{result['skipped_keywords']} non-Rajasthan keywords skipped after the likely_fraud target was met")
+    p(f"\n{'role':6s} {'keyword':34s} {'results':>7s} {'new':>4s} {'fraud':>5s} {'uncl':>5s} {'legit':>5s} "
+      f"{'raj':>4s} {'lfin':>4s}")
     for r in result["keywords"]:
         p(f"{r['role']:6s} {r['keyword'][:34]:34s} {r['results']:7d} {r['new_public']:4d} {r['likely_fraud']:5d} "
-          f"{r['unclear']:5d} {r['likely_legit']:5d}")
+          f"{r['unclear']:5d} {r['likely_legit']:5d} {r.get('rajasthan_focus', 0):4d} {r.get('legit_finance', 0):4d}")
     p(f"\n-> {out}\n-> {out.with_suffix('.csv')}\n-> {out.with_name(out.stem + '.keywords.csv')}")
 
 
-def dry_run(cfg: dict, target_fraud: int, legit_target: int, rpm: float, stream=sys.stdout) -> None:
+def dry_run(cfg: dict, target_fraud: int, legit_target: int, rpm: float, stream=sys.stdout,
+            target_rajasthan: int = 25) -> None:
     s = cfg["settings"]
     p = lambda *a: print(*a, file=stream)  # noqa: E731
     p("dry run: no Telegram requests are made, nothing is written")
@@ -429,9 +608,12 @@ def dry_run(cfg: dict, target_fraud: int, legit_target: int, rpm: float, stream=
         p(f"    {g}: {n}")
     p(f"  per keyword: 1 search (limit {s['search_limit']}), then per new candidate 1 history read of "
       f"{s['posts_per_channel']} posts (+1 if the subscriber count is missing)")
-    p(f"  stop: {target_fraud} likely_fraud candidates or keywords exhausted; then up to {legit_target} legit negatives")
+    p(f"  seed groups: {dict(Counter(g or '-' for _, g in cfg['seeds']))}")
+    p(f"  stop: {target_fraud} likely_fraud incl. {target_rajasthan} rajasthan_focus, or keywords exhausted; "
+      f"then legit keywords until {legit_target} legit_finance")
     p(f"  labels: likely_fraud if score >= {s['likely_fraud']}, likely_legit if < {s['likely_legit']}")
-    p(f"  rate: {rpm} requests/min -> e.g. 500 candidates ~ {round((len(cfg['fraud']) + 500 * 1.5) / rpm)} min")
+    n_kw = len(cfg["fraud"]) + len(cfg["legit"])
+    p(f"  rate: {rpm} requests/min -> {n_kw} searches ~ {round(n_kw / rpm)} min, plus ~1 min per 20 new candidates")
 
 
 async def _connect(session: str, api_id: int, api_hash: str):
@@ -448,12 +630,12 @@ async def _connect(session: str, api_id: int, api_hash: str):
 
 
 async def run(args) -> None:
-    cfg = load_discovery_config(args.keywords, args.seeds)
+    cfg = load_discovery_config(args.keywords, args.seeds, args.extra_seeds)
     collector_settings = load_channels_config(args.channels_config)["settings"] \
         if Path(args.channels_config).exists() else {}
     out = Path(args.out)
     if args.dry_run:
-        dry_run(cfg, args.target_fraud, args.legit_target, args.rpm)
+        dry_run(cfg, args.target_fraud, args.legit_target, args.rpm, target_rajasthan=args.target_rajasthan)
         return
     load_env()
     api_id, api_hash = os.environ.get("TELEGRAM_API_ID"), os.environ.get("TELEGRAM_API_HASH")
@@ -467,7 +649,8 @@ async def run(args) -> None:
             me = await client.get_me()
             print(f"logged in (user id {me.id}); session saved to {session}")
             return
-        result = await discover(client, cfg, out, args.target_fraud, args.legit_target, args.rpm, collector_settings)
+        result = await discover(client, cfg, out, args.target_fraud, args.legit_target, args.rpm, collector_settings,
+                                target_rajasthan=args.target_rajasthan)
     finally:
         await client.disconnect()
     print_report(result, out)
@@ -478,9 +661,11 @@ def main(argv=None):
     ap.add_argument("--out", default="config/channels.discovered.yaml")
     ap.add_argument("--keywords", default="config/discovery_keywords.yaml")
     ap.add_argument("--seeds", default="config/discovery_seeds.yaml")
+    ap.add_argument("--extra-seeds", default="store/discovery_seeds.yaml", help="git-ignored seeds with groups")
     ap.add_argument("--channels-config", default="config/channels.yaml", help="collector settings copied into --out")
     ap.add_argument("--target-fraud", type=int, default=100, help="stop fraud keywords once this many likely_fraud")
-    ap.add_argument("--legit-target", type=int, default=20)
+    ap.add_argument("--target-rajasthan", type=int, default=25, help="of the likely_fraud, rajasthan_focus")
+    ap.add_argument("--legit-target", type=int, default=20, help="legit_finance negatives")
     ap.add_argument("--rpm", type=float, default=20, help="Telegram requests per minute")
     ap.add_argument("--dry-run", action="store_true", help="print the plan without contacting Telegram")
     ap.add_argument("--login", action="store_true", help="log the research account in (interactive) and exit")

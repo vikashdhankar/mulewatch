@@ -44,6 +44,34 @@ fraud:
     - करंट अकाउंट किट
     - पार्ट टाइम जॉब
     - घर बैठे कमाई
+  crypto:
+    - usdt inr
+    - usdt to inr
+    - inr to usdt
+    - usdt seller
+    - usdt buyer
+    - usdt cash
+    - usdt f2f
+    - p2p usdt
+    - binance p2p india
+    - crypto exchange inr
+    - usdt payout
+    - usdt commission
+    - crypto investment india
+    - trading profit daily
+    - forex signals india
+    - double money
+    - 100% profit
+    - investment plan daily return
+
+# Expanded into "<place> <suffix>" searches (group "rajasthan"), searched after the groups above.
+# Once the likely_fraud target is met, only these keep running until the Rajasthan target is met too.
+rajasthan:
+  places: [jaipur, jodhpur, udaipur, kota, bikaner, bharatpur, sikar, jhunjhunu, ajmer, alwar, bhilwara,
+           sri ganganagar, nagaur, pali, barmer, churu, tonk, dausa, chittorgarh, bhiwadi, rajasthan]
+  suffixes: [usdt, account, kit, job, earning, trading]
+  hindi_places: [जयपुर, जोधपुर, उदयपुर, कोटा, बीकानेर, भरतपुर, सीकर, झुंझुनूं, अजमेर, अलवर]
+  hindi_suffixes: [खाता, कमाई, जॉब]
 
 # Searched after the fraud keywords to find legitimate finance channels as negatives.
 legit:
@@ -53,6 +81,14 @@ legit:
     - sebi
     - personal finance india
     - stock market news
+    # added to reach ~20 legit_finance negatives (the five above return few public channels)
+    - stock market india
+    - share market hindi
+    - nifty sensex
+    - mutual fund india
+    - income tax india
+    - finance news hindi
+    - sbi official
 
 search_limit: 100        # results asked for per keyword (Telegram returns fewer in practice)
 
@@ -63,3 +99,4 @@ scoring:
   post_cap: 10.0         # one post contributes at most this much cue weight
   likely_fraud: 5.0      # score >= this -> likely_fraud
   likely_legit: 2.0      # score < this -> likely_legit; in between -> unclear
+  rajasthan_focus: 0.2   # geo_score >= this -> rajasthan_focus

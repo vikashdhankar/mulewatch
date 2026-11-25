@@ -2,6 +2,7 @@
 FloodWait handling, output format, and that no post text or contact value leaks into logs or files."""
 import asyncio
 import csv
+from collections import Counter
 import io
 import logging
 from datetime import datetime, timedelta, timezone
@@ -74,9 +75,9 @@ class FakeClient:
 
 def cfg(fraud=(), legit=(), seeds=(), **scoring):
     s = {"posts_per_channel": 30, "contact_weight": 4.0, "title_weight": 0.5, "post_cap": 10.0,
-         "likely_fraud": 5.0, "likely_legit": 2.0, "search_limit": 100, **scoring}
+         "likely_fraud": 5.0, "likely_legit": 2.0, "rajasthan_focus": 0.2, "search_limit": 100, **scoring}
     return {"fraud": [("english", k) for k in fraud], "legit": [("english", k) for k in legit],
-            "seeds": list(seeds), "settings": s}
+            "seeds": [(x, "") if isinstance(x, str) else tuple(x) for x in seeds], "settings": s}
 
 
 async def no_sleep(_):
@@ -184,7 +185,7 @@ def test_keyword_csv_counts(tmp_path):
 
 def test_stops_at_fraud_target(tmp_path):
     client = scenario()
-    res, _ = run(client, cfg(["current account kit", "payout account"]), tmp_path, target_fraud=2)
+    res, _ = run(client, cfg(["current account kit", "payout account"]), tmp_path, target_fraud=2, target_rajasthan=0)
     assert res["stopped_at_target"]
     assert [r["keyword"] for r in res["keywords"]] == ["(seed list)", "current account kit"]
     assert client.calls.count("SearchRequest") == 1
@@ -232,8 +233,12 @@ def test_repo_configs_load():
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
     c = dc.load_discovery_config(root / "config/discovery_keywords.yaml", root / "config/discovery_seeds.yaml")
-    assert len(c["fraud"]) == 40 and len(c["legit"]) == 5 and len(c["seeds"]) == 6
-    assert {g for g, _ in c["fraud"]} == {"english", "hinglish", "hindi"}
+    assert len(c["legit"]) == 12 and len(c["seeds"]) == 6
+    groups = Counter(g for g, _ in c["fraud"])
+    assert groups == {"english": 26, "hinglish": 9, "hindi": 5, "crypto": 16, "rajasthan": 21 * 6 + 10 * 3}
+    kws = [k for _, k in c["fraud"]]
+    assert len(kws) == len(set(kws)) and "sri ganganagar usdt" in kws and "जयपुर खाता" in kws
+    assert kws.index("rbl account") < kws.index("usdt seller") < kws.index("jaipur usdt")
 
 
 # ----------------------------------------------------------------------------- collector approval gate
@@ -261,3 +266,151 @@ def test_discovered_file_round_trips_into_collector(tmp_path):
     doc["channels"][0]["approved"] = True
     out.write_text(yaml.safe_dump(doc, allow_unicode=True))
     assert [c["username"] for c in tp.load_config(out)["channels"]] == [doc["channels"][0]["username"]]
+
+
+# ----------------------------------------------------------------------------- geo, categories, seeds
+
+from collect.rajasthan import places_in  # noqa: E402
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Jaipur current account kit", {"jaipur"}), ("जयपुर में खाता", {"jaipur"}),
+    ("Jhunjhunun wale bhai", {"jhunjhunu"}), ("झुंझुनूं", {"jhunjhunu"}),
+    ("sriganganagar", {"sri_ganganagar"}), ("Ganganagar", {"sri_ganganagar"}),
+    ("Chittaurgarh", {"chittorgarh"}), ("PIN 302001", {"rajasthan_pin"}), ("pincode 333 001", {"rajasthan_pin"}),
+    ("Price 300000", set()), ("₹300000", set()), ("300000 rs", set()), ("limit 340000 daily", set()),
+    ("call 9829041736", set()), ("kotak bank", set()), ("Delhi 110001", set()),
+])
+def test_places(text, expected):
+    assert places_in(text) == expected
+
+
+RAJ_POSTS = ["Jaipur current account kit available, full kit passbook net banking, WhatsApp 9829041736",
+             "Jodhpur payout account ready, commission per transaction, DM @kit_dealer_x",
+             "जयपुर करंट अकाउंट किट उपलब्ध, खाता किराये पर, संपर्क t.me/kitwala_bhai"]
+USDT_POSTS = ["USDT seller, INR to USDT best rate, binance p2p, f2f cash, DM @usdt_dealer_y",
+              "Buy USDT TRC20, p2p trusted, tether rate today, call 9829041736",
+              "USDT to INR f2f in Jaipur, p2p binance, commission 2%, WhatsApp 9829041736"]
+INVEST_POSTS = ["Double money in 7 days! 100% profit guaranteed, investment plan daily return, DM @inv_x",
+                "Trading profit daily, VIP signal, guaranteed return, join t.me/profit_x",
+                "Forex signals, 100% profit, daily profit plan, WhatsApp 9829041736"]
+TASK_POSTS = ["Part time job, work from home, daily payment, like videos and earn, DM @task_x",
+              "Ghar baithe kamai, task job, daily income 3000, salary daily, contact 9829041736",
+              "पार्ट टाइम जॉब, घर बैठे कमाई, रोज पेमेंट, संपर्क t.me/task_y"]
+
+
+def scored(posts, title="x", **kw):
+    c = dc.Candidate(id=1, username="u", title=title, kind="broadcast", **kw)
+    dc.score_candidate(c, posts, [NOW], cfg()["settings"] | {"rajasthan_focus": 0.2})
+    return c
+
+
+def test_geo_score_and_focus():
+    c = scored(RAJ_POSTS + FRAUD_POSTS)                           # 3 of 7 posts name a Rajasthan place
+    assert c.geo_score == round(3 / 7, 3) and c.rajasthan_focus and c.top_district == "jaipur"
+    assert c.districts["jaipur"] == 2 and c.districts["jodhpur"] == 1
+    c = scored(FRAUD_POSTS)
+    assert c.geo_score == 0 and not c.rajasthan_focus and c.top_district == ""
+
+
+@pytest.mark.parametrize("posts,category", [
+    (FRAUD_POSTS[:1] + RAJ_POSTS[::2], "account_sale"),
+    (USDT_POSTS, "usdt_p2p"), (INVEST_POSTS, "crypto_investment_scam"), (TASK_POSTS, "task_job_scam"),
+    (["Gaming payout available, payin payout, betting payout, settlement daily, commission per transaction",
+      "Payin payout service, casino gaming payout, running account, WhatsApp 9829041736",
+      "Payout account, fund transfer, per transaction 2%, DM @payout_x"], "payout_mule"),
+    (LEGIT_POSTS, "legit_finance"),
+    (["Good morning everyone", "Cricket match today", "Movie review: great film"], "unrelated"),
+])
+def test_categories(posts, category):
+    assert scored(posts).category == category
+
+
+def test_mixed_signals_are_unclear():
+    tie = Counter({"usdt_p2p": 4, "account_sale": 3})
+    assert dc.decide_category(tie, "likely_fraud", False, 5) == "unclear"
+    assert dc.decide_category(Counter({"usdt_p2p": 6, "account_sale": 3}), "likely_fraud", False, 5) == "usdt_p2p"
+    assert dc.decide_category(Counter({"usdt_p2p": 2}), "likely_fraud", False, 5) == "unclear"   # too few cues
+    assert dc.decide_category(Counter({"legit_finance": 1}), "likely_legit", True, 5) == "legit_finance"
+    assert dc.decide_category(Counter(), "likely_fraud", False, 0) == "unclear"
+
+
+def test_investment_and_usdt_ads_score_as_fraud():
+    assert scored(USDT_POSTS).label == "likely_fraud" and scored(INVEST_POSTS).label == "likely_fraud"
+
+
+def test_awareness_share():
+    c = scored(AWARE_POSTS + LEGIT_POSTS[:2])
+    assert c.awareness_share == 0.5 and c.label == "likely_legit"
+
+
+def test_seed_files_merge_and_keep_group(tmp_path):
+    a, b = tmp_path / "a.yaml", tmp_path / "b.yaml"
+    a.write_text("seeds:\n  - alpha_chan\n  - beta_chan\n")
+    b.write_text("seeds:\n  - username: '@Beta_chan'\n    group: rajasthan_usdt\n  - {username: gamma_chan, group: usdt_p2p}\n"
+                 "  - delta_chan\n")
+    assert dc.load_seeds(a, b, tmp_path / "missing.yaml") == [
+        ("alpha_chan", ""), ("beta_chan", "rajasthan_usdt"), ("gamma_chan", "usdt_p2p"), ("delta_chan", "")]
+
+
+def test_seed_group_kept_in_output(tmp_path):
+    seed = chan(8, "seed_chan", "Seed")
+    client = FakeClient({}, {8: msgs(RAJ_POSTS)}, entities={"seed_chan": seed})
+    c = cfg(seeds=[("seed_chan", "rajasthan_usdt")])
+    _, out = run(client, c, tmp_path)
+    entry = yaml.safe_load(out.read_text())["channels"][0]
+    assert entry["seed_group"] == "rajasthan_usdt" and entry["found_by"] == ["seed list (group: rajasthan_usdt)"]
+    assert entry["rajasthan_focus"] and entry["category"] == "account_sale"
+
+
+def test_csv_columns(tmp_path):
+    _, out = run(scenario(), cfg(["current account kit"]), tmp_path)
+    header = out.with_suffix(".csv").read_text().splitlines()[0].split(",")
+    assert header[:10] == ["username", "title", "subscribers", "last_post", "score", "category", "rajasthan_focus",
+                           "geo_score", "lang_mix", "found_by"]
+    row = next(csv.DictReader(open(out.with_suffix(".csv"))))
+    assert row["lang_mix"].startswith("dev=") and ";rom=" in row["lang_mix"]
+
+
+def raj_scenario(n_plain=4, n_raj=3):
+    """n_plain fraud channels from 'kit seller', n_raj Rajasthan fraud channels from 'jaipur kit'."""
+    plain = [chan(100 + i, f"plain_kit_{i}") for i in range(n_plain)]
+    raj = [chan(200 + i, f"jaipur_kit_{i}") for i in range(n_raj)]
+    other = [chan(300 + i, f"other_kit_{i}") for i in range(2)]
+    news = [chan(400 + i, f"fin_news_{i}") for i in range(3)]
+    posts = {**{c.id: msgs(FRAUD_POSTS) for c in plain + other}, **{c.id: msgs(RAJ_POSTS) for c in raj},
+             **{c.id: msgs(LEGIT_POSTS) for c in news}}
+    search = {"kit seller": plain, "usdt seller": other, "jaipur kit": raj, "nifty": news[:2], "sebi": news[2:]}
+    return FakeClient(search, posts)
+
+
+def raj_cfg():
+    c = cfg(["kit seller", "usdt seller"], ["nifty", "sebi"])
+    c["fraud"].append(("rajasthan", "jaipur kit"))
+    return c
+
+
+def test_stop_rule_keeps_searching_rajasthan_until_its_target(tmp_path):
+    client = raj_scenario()
+    res, _ = run(client, raj_cfg(), tmp_path, target_fraud=3, target_rajasthan=2, legit_target=2)
+    searched = [r["keyword"] for r in res["keywords"]]
+    assert "usdt seller" not in searched and "jaipur kit" in searched     # skipped once fraud target met
+    assert res["skipped_keywords"] == 1 and res["rajasthan_fraud"] == 3
+    assert "sebi" not in searched and res["legit_finance"] == 2           # legit target reached after 'nifty'
+    assert res["districts"] == {"jaipur": 3}
+
+
+def test_stops_when_both_targets_met(tmp_path):
+    client = raj_scenario()
+    res, _ = run(client, raj_cfg(), tmp_path, target_fraud=3, target_rajasthan=0)
+    assert res["stopped_at_target"] and [r["keyword"] for r in res["keywords"]][:2] == ["(seed list)", "kit seller"]
+    assert client.calls.count("SearchRequest") == 1 + 2                    # 'kit seller' + both legit keywords
+
+
+def test_report_prints_categories_and_districts(tmp_path):
+    res, out = run(raj_scenario(), raj_cfg(), tmp_path, target_fraud=50, target_rajasthan=2)
+    buf = io.StringIO()
+    dc.print_report(res, out, stream=buf)
+    text = buf.getvalue()
+    assert "per category:" in text and "account_sale" in text and "legit_finance" in text
+    assert "per district" in text and "jaipur" in text and "keywords exhausted" in text
