@@ -17,7 +17,7 @@ $PY -m data.splits --posts "$W/redacted.jsonl" --gold "$W/annotations/gold.jsonl
     --results-dir "$W/results"
 for s in time channel time_channel; do
   $PY -m models.run --config models/configs/tfidf_lr.yaml --split $s --splits-dir "$W/splits" \
-      --results-dir "$W/results"
+      --results-dir "$W/results" --predictions-dir "$W/predictions" --checkpoints "$W/checkpoints"
 done
 $PY -m robustness.attacks --config models/configs/tfidf_lr.yaml --split time_channel --splits-dir "$W/splits" \
     --attacks char,translit,emoji --results-dir "$W/results"

@@ -68,10 +68,13 @@ def main(argv=None):
     ap.add_argument("--seeds", default="", help="comma-separated; default from the config")
     ap.add_argument("--results-dir", default=str(RESULTS_DIR))
     ap.add_argument("--save-model", action="store_true")
+    ap.add_argument("--predictions-dir", default="store/predictions")
+    ap.add_argument("--checkpoints", default="checkpoints")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     seeds = [int(s) for s in args.seeds.split(",") if s.strip()] or cfg["seeds"]
-    run(cfg, args.split, args.splits_dir, seeds, args.results_dir, args.save_model)
+    run(cfg, args.split, args.splits_dir, seeds, args.results_dir, args.save_model, args.predictions_dir,
+        args.checkpoints)
 
 
 if __name__ == "__main__":
