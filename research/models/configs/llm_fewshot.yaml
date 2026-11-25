@@ -1,0 +1,22 @@
+# LLM via an OpenAI-compatible endpoint. Ollama: `ollama serve`, base_url http://localhost:11434/v1;
+# vLLM: `vllm serve <model>`, base_url http://localhost:8000/v1. base_url falls back to LLM_BASE_URL in .env.
+name: llm_fewshot
+type: llm
+seeds: [13]
+params:
+  model: qwen2.5:7b-instruct          # vLLM: e.g. Qwen/Qwen2.5-7B-Instruct
+  base_url: null
+  allow_remote: false                 # remote endpoints get redacted posts; needs ethics sign-off
+  shots_per_class: 2                  # examples per class drawn from train (0 = zero-shot)
+  max_shot_chars: 400
+  max_chars: 1500
+  temperature: 0.0
+  max_tokens: 32
+  workers: 4
+  timeout_s: 120
+  fallback_label: benign              # used when the answer has no valid class (counted as invalid_outputs)
+cost:
+  hardware: "1x NVIDIA L4 running the model locally"
+  usd_per_hour: 0.80                  # GPU price; wall-clock time is measured from the client
+  usd_per_1m_input_tokens: 0.0        # set for a paid API
+  usd_per_1m_output_tokens: 0.0
