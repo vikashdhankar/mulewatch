@@ -9,10 +9,19 @@
 #   ./run.sh --lan               let other devices on the network open the command center
 #                                (everyone signs in; the default is still this laptop only)
 #
+#   ./run.sh watcher             real-time Telegram watcher (run it next to the command center)
+#   ./run.sh watcher login       sign in to Telegram once for the watcher
+#   ./run.sh watcher --replay FILE [--speed 50x] [--push]
+#                                replay collected posts (e.g. research/store/raw/telegram.jsonl)
+#   ./run.sh watcher health|retrain|export-feedback|run --once   (see backend/watcher/README.md)
+#
 # If the default port is taken by another program, the next free port is used automatically.
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
+
+WATCHER=0; WARGS=()
+if [ "${1:-}" = watcher ]; then WATCHER=1; shift; WARGS=("$@"); set --; fi
 
 LOCAL_FORUM=0; RESET=0; LAN=0; PORT="${MW_PORT:-}"; FPORT="${FORUM_PORT:-}"
 while [ $# -gt 0 ]; do
@@ -24,7 +33,7 @@ while [ $# -gt 0 ]; do
     --port=*) PORT="${1#*=}" ;;
     --forum-port) FPORT="$2"; shift ;;
     --forum-port=*) FPORT="${1#*=}" ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see ./run.sh --help)"; exit 1 ;;
   esac
   shift
@@ -74,6 +83,28 @@ if [ ! -f .venv/.deps-ok ] || [ backend/requirements.txt -nt .venv/.deps-ok ]; t
 fi
 
 command -v tesseract >/dev/null || echo "!! Tesseract OCR not found — image text won't be read. Install: $INSTALL_HINT"
+
+if [ "$WATCHER" = 1 ]; then
+  if [ ! -f .venv/.watcher-deps-ok ] || [ backend/watcher/requirements.txt -nt .venv/.watcher-deps-ok ]; then
+    echo "==> Installing watcher packages"
+    pip install -q -r backend/watcher/requirements.txt
+    touch .venv/.watcher-deps-ok
+  fi
+  case "${WARGS[0]:-}" in
+    "") set -- run ;;
+    --replay)
+      f="${WARGS[1]:-}"
+      [ -n "$f" ] || { echo "Usage: ./run.sh watcher --replay FILE [--speed 50x] [--push]"; exit 1; }
+      case "$f" in /*) ;; *) if [ -f "$ROOT/$f" ]; then f="$ROOT/$f"; else f="$ROOT/research/$f"; fi ;; esac
+      [ -f "$f" ] || { echo "!! No such file: ${WARGS[1]}"; exit 1; }
+      set -- replay "$f" "${WARGS[@]:2}" ;;
+    *) set -- "${WARGS[@]}" ;;
+  esac
+  echo "==> Telegram watcher: python -m watcher $*"
+  echo "    alerts show on the command center's Telegram watcher page (start it with ./run.sh)"
+  cd backend
+  exec python -m watcher "$@"
+fi
 
 if [ ! -f frontend/dist/index.html ]; then
   if command -v npm >/dev/null; then

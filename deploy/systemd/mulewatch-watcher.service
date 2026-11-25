@@ -1,0 +1,36 @@
+# Real-time Telegram watcher for MuleWatch. Runs next to mulewatch.service (the command center) and writes
+# into the same database, so its alerts show live there. Paths follow deploy/new-vps (/srv/apps/mulewatch,
+# user apps); change them if yours differ.
+#
+# Before enabling it (once, as the apps user):
+#   cd /srv/apps/mulewatch/backend && ../.venv/bin/pip install -r watcher/requirements.txt
+#   ../.venv/bin/python -m watcher login          # interactive: phone number and code, makes the session file
+#   approve channels in research/config/channels.discovered.yaml (approved: true)
+#   set paused: false in backend/watcher/watcher.yaml, or Resume on the Telegram watcher page
+# Then:
+#   sudo cp deploy/systemd/mulewatch-watcher.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mulewatch-watcher
+#   journalctl -u mulewatch-watcher -f            # logs hold no post text and no contact values
+[Unit]
+Description=MuleWatch Telegram watcher (read-only polling of approved public channels)
+After=network-online.target mulewatch.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+User=apps
+WorkingDirectory=/srv/apps/mulewatch/backend
+# Same environment as the command center (database location, bot token, duty chat).
+# research/.env (Telegram API id/hash, hash salt, LLM endpoint) is read by the watcher itself.
+EnvironmentFile=/srv/apps/mulewatch/.env
+ExecStart=/srv/apps/mulewatch/.venv/bin/python -m watcher run
+Restart=always
+RestartSec=30
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
