@@ -63,7 +63,7 @@ from pathlib import Path
 
 import yaml
 
-from collect.rajasthan import places_in
+from collect.rajasthan import places_in, username_places
 from collect.telegram_public import (RateLimiter, load_config as load_channels_config, make_client,
                                      normalize_username, telegram_lock)
 from common.io import load_env
@@ -139,7 +139,9 @@ def cue_score(text: str, cap: float = 10.0) -> float:
 CATEGORY_TERMS: dict[str, list[str]] = {
     "payout_mule": ["payout", "payin", "pay-in", "pay in", "gaming", "betting", "casino", "per transaction",
                     "commission per", "running account", "settlement", "fund transfer", "escrow", "upi load",
-                    "payment gateway", "gateway account", "merchant account", "pg account", "पेआउट"],
+                    "payment gateway", "gateway account", "merchant account", "pg account", "पेआउट",
+                    # payment-agency channels ("xxxpay") recruiting account holders as deposit/withdrawal agents
+                    "deposit", "withdrawal", "withdraw", "agent", "agents", "pay agent", "recharge", "collection"],
     "account_sale": ["kit", "kits", "full kit", "passbook", "net banking", "netbanking", "corporate account",
                      "current account", "savings account", "saving account", "firm account", "old account",
                      "fresh account", "account sale", "account sell", "on rent", "for rent", "kiraye", "kiraya",
@@ -187,11 +189,53 @@ def decide_category(hits: Counter, label: str, verified: bool, posts: int) -> st
         if fraud_total <= 2 and legit_n < 3:
             return "unrelated"
         return "unclear"
-    if top_n >= 3 and top_n >= 1.5 * second_n:          # clearly ahead of the runner-up
+    if top_n >= 3 and top_n > second_n:                  # ahead of the runner-up
         return top
     if label == "unclear" and legit_n >= 3 and legit_n > fraud_total:
         return "legit_finance"
     return "unclear"
+
+
+def secondary_category(hits: Counter, category: str) -> str:
+    """The runner-up fraud category when it is nearly as strong (>= half the top count, at least 3 cues);
+    on an exact tie (category 'unclear') both tied categories, joined with '+'."""
+    fraud = sorted(((hits.get(c, 0), c) for c in FRAUD_CATEGORIES), key=lambda x: (-x[0], x[1]))
+    (top_n, top), (second_n, second) = fraud[0], fraud[1]
+    if top_n >= 3 and top_n == second_n:
+        return f"{top}+{second}"
+    if category == top and second_n >= 3 and second_n * 2 >= top_n:
+        return second
+    return ""
+
+
+def username_words(username: str) -> str:
+    """'Channels_KTTPAY' -> 'Channels KTTPAY', 'dukepay2026' -> 'dukepay' (for cue matching)."""
+    return " ".join(w for w in re.split(r"[_\d]+|(?<=[a-z])(?=[A-Z])", username or "") if w)
+
+
+_PAY_NAME = re.compile(r"pay(?!tm)", re.I)
+
+
+def name_category_hits(username: str, title: str) -> Counter:
+    hits = category_hits(username_words(username)) + category_hits(title)
+    if _PAY_NAME.search(username or "") or _PAY_NAME.search(title or ""):   # "dukepay", "TGApay", "KTTPAY"
+        hits["payout_mule"] += 2
+    return hits
+
+
+def apply_name_signals(c: "Candidate", s: dict) -> None:
+    """Rajasthan places named in the username or title: they count for rajasthan_focus and the district
+    even when recent posts don't name the place. Needs no Telegram request, so it also updates channels
+    scored before this rule existed."""
+    names = username_places(c.username) | places_in(c.title)
+    c.name_places = sorted(names)
+    districts = Counter(c.districts or {})
+    for d in username_places(c.username):
+        districts[d] = max(districts[d], 1)
+    c.districts = dict(districts.most_common(3))
+    c.rajasthan_focus = c.geo_score >= s.get("rajasthan_focus", 0.2) or bool(names)
+    named = [d for d, _ in districts.most_common() if d not in ("rajasthan", "rajasthan_pin")]
+    c.top_district = named[0] if named else (districts.most_common(1)[0][0] if districts else "")
 
 
 # count-only: the probe's salt is irrelevant because the hashes are never kept
@@ -261,6 +305,9 @@ class Candidate:
     seed_group: str = ""
     error: str = ""
     inspected: bool = False
+    name_places: list = field(default_factory=list)
+    category_also: str = ""
+    category_hits: dict | None = None     # aggregate cue counts per category (None: scored before v2)
 
 
 def public_username(entity) -> str | None:
@@ -317,15 +364,15 @@ def score_candidate(c: Candidate, texts: list[str], dates: list[datetime], s: di
     district_counts = Counter(d for ps in places for d in ps)
     district_counts.update(places_in(c.title))
     c.geo_score = round(sum(bool(ps) for ps in places) / len(with_text), 3) if with_text else 0.0
-    c.rajasthan_focus = c.geo_score >= s.get("rajasthan_focus", 0.2)
     c.districts = dict(district_counts.most_common(3))
-    named = [d for d, _ in district_counts.most_common() if d not in ("rajasthan", "rajasthan_pin")]
-    c.top_district = named[0] if named else (district_counts.most_common(1)[0][0] if district_counts else "")
+    apply_name_signals(c, s)
 
-    hits = Counter()
-    for t in with_text + [c.title]:
+    hits = name_category_hits(c.username, c.title)
+    for t in with_text:
         hits.update(category_hits(t))
+    c.category_hits = dict(hits)
     c.category = decide_category(hits, c.label, c.verified, len(with_text))
+    c.category_also = secondary_category(hits, c.category)
     c.awareness_share = round(sum(any(rx.search(t) for rx in _AWARE_RX) for t in with_text) / len(with_text), 3) \
         if with_text else 0.0
 
@@ -582,6 +629,7 @@ def _entry(c: Candidate, today: str) -> dict:
     first = c.found_by[0]
     return {"username": c.username, "title": c.title, "approved": False, "label": c.label, "score": c.score,
             "category": c.category, "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
+            "category_also": c.category_also or None, "name_places": c.name_places,
             "top_district": c.top_district or None, "districts": c.districts,
             "awareness_share": c.awareness_share,
             "subscribers": c.subscribers, "last_post": c.last_post or None, "lang_mix": c.lang_mix,
@@ -608,7 +656,7 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
     tmp.replace(out)
 
     cols = ["username", "title", "subscribers", "last_post", "score", "category", "rajasthan_focus", "geo_score",
-            "lang_mix", "found_by", "label", "kind", "approved"]
+            "lang_mix", "found_by", "label", "kind", "category_also", "top_district", "approved"]
     with open(out.with_suffix(".csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
@@ -619,7 +667,8 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
                         "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
                         "lang_mix": f"dev={mix.get('devanagari', 0)};rom={mix.get('roman_hindi', 0)};"
                                     f"en={mix.get('english', 0)}",
-                        "found_by": "; ".join(c.found_by), "label": c.label, "kind": c.kind, "approved": False})
+                        "found_by": "; ".join(c.found_by), "label": c.label, "kind": c.kind,
+                        "category_also": c.category_also, "top_district": c.top_district, "approved": False})
     with open(out.with_name(out.stem + ".keywords.csv"), "w", newline="", encoding="utf-8") as f:
         cols = ["role", "group", "keyword", "results", "new_public", "likely_fraud", "unclear", "likely_legit",
                 "rajasthan_focus", "legit_finance", "capped"]
@@ -646,6 +695,7 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
                    max_new_per_keyword=max_new_per_keyword)
     for cd in state["candidates"]:                   # resume: channels scored on earlier runs are not re-read
         c = Candidate(**cd)
+        apply_name_signals(c, s)                     # username/title places: no request needed
         d.by_id[c.id] = c
     rows: list[dict] = state["rows"]
     collector_settings = collector_settings or {}
@@ -668,6 +718,22 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
     fraud_done = lambda: d.count("likely_fraud") >= target_fraud  # noqa: E731
     raj_done = lambda: d.count("likely_fraud", rajasthan=True) >= target_rajasthan  # noqa: E731
     try:
+        # channels scored before category counts were stored and still 'unclear': read them once more so
+        # the current category rules apply (input peer from the session cache, so no username lookup)
+        redo = [c for c in d.by_id.values() if c.category_hits is None and c.category == "unclear" and not c.error]
+        if redo:
+            log.info("re-reading %d earlier channels whose category was unclear", len(redo))
+        for c in redo:
+            if budget.remaining < reserve:
+                raise StopForToday(f"daily budget nearly used ({budget.used}/{daily_budget})")
+            try:
+                c._entity = client.session.get_input_entity(c.username)
+            except Exception:
+                c.category_hits = {}                 # not in the cache: leave it as it is
+                continue
+            await d.inspect(c)
+            checkpoint()
+
         done_seeds = {u.lower() for u in state["seeds_done"] + state["seeds_failed"]}
         pending = [(u, g) for u, g in cfg["seeds"] if u.lower() not in done_seeds]
         if pending:

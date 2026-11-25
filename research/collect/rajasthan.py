@@ -58,3 +58,25 @@ def places_in(text: str) -> set[str]:
             found.add("rajasthan_pin")
             break
     return found
+
+
+# spellings this short also occur inside unrelated words (kotak, pali in napali, tonk ...): in a username they
+# count only as a whole word (between _ / digits / capitals), longer ones also inside a run-together name
+_MIN_SUBSTRING = 6
+
+
+def username_places(username: str) -> set[str]:
+    """Places named in a channel username: USDT_BUYER_JAIPUR, Usdtsellerrajasthan, kota_kit_99."""
+    if not username:
+        return set()
+    words = {w.lower() for w in re.split(r"[_\d]+|(?<=[a-z])(?=[A-Z])", username) if w}
+    flat = username.lower()
+    found = set()
+    for d, terms in PLACES.items():
+        for t in terms:
+            if not t.isascii():
+                continue
+            t = t.replace(" ", "")
+            if t in words or (len(t) >= _MIN_SUBSTRING and t in flat):
+                found.add(d)
+    return found

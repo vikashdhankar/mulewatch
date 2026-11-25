@@ -48,12 +48,14 @@ class FakeSession:
     """Telethon's on-disk entity cache: knows the usernames in `cached`."""
 
     def __init__(self, client, cached=()):
-        self.client, self.cached = client, set(cached)
+        self.client = client
+        self.cached = dict(cached) if isinstance(cached, dict) else {u: None for u in cached}
 
     def get_input_entity(self, username):
         if username not in self.cached:
             raise ValueError("not cached")
-        return ("input", username)
+        ent = self.client.entities.get(username)
+        return SimpleNamespace(username=username, id=ent.id if ent else self.cached[username])
 
 
 class FakeClient:
@@ -79,13 +81,13 @@ class FakeClient:
         self.calls.append("resolve_username")
         if username not in self.entities:
             raise ValueError("No user has that username")
-        return ("input", username)
+        return SimpleNamespace(username=username, id=self.entities[username].id)
 
     async def get_entity(self, inputs):
         self.calls.append("get_entity")
         if isinstance(inputs, list):
-            return [self.entities[u] for _, u in inputs]
-        return self.entities[inputs[1]]
+            return [self.entities[x.username] for x in inputs]
+        return self.entities[inputs.username]
 
     async def get_messages(self, entity, limit=30):
         self.calls.append("get_messages")
@@ -351,9 +353,14 @@ def test_categories(posts, category):
 
 
 def test_mixed_signals_are_unclear():
-    tie = Counter({"usdt_p2p": 4, "account_sale": 3})
+    tie = Counter({"usdt_p2p": 4, "payout_mule": 4})
     assert dc.decide_category(tie, "likely_fraud", False, 5) == "unclear"
+    assert dc.secondary_category(tie, "unclear") == "payout_mule+usdt_p2p"
+    near = Counter({"usdt_p2p": 4, "payout_mule": 3})               # ahead by one: still a winner
+    assert dc.decide_category(near, "likely_fraud", False, 5) == "usdt_p2p"
+    assert dc.secondary_category(near, "usdt_p2p") == "payout_mule"
     assert dc.decide_category(Counter({"usdt_p2p": 6, "account_sale": 3}), "likely_fraud", False, 5) == "usdt_p2p"
+    assert dc.secondary_category(Counter({"usdt_p2p": 9, "account_sale": 3}), "usdt_p2p") == ""
     assert dc.decide_category(Counter({"usdt_p2p": 2}), "likely_fraud", False, 5) == "unclear"   # too few cues
     assert dc.decide_category(Counter({"legit_finance": 1}), "likely_legit", True, 5) == "legit_finance"
     assert dc.decide_category(Counter(), "likely_fraud", False, 0) == "unclear"
@@ -515,3 +522,64 @@ def test_only_one_telegram_job_at_a_time(tmp_path):
                 pass
     with tp.telegram_lock(lock):                                # released again
         pass
+
+
+# ----------------------------------------------------------------------------- names and re-scoring
+
+from collect.rajasthan import username_places  # noqa: E402
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("USDT_BUYER_JAIPUR", {"jaipur"}), ("Delhi_jaipur_usdt_exchange", {"jaipur"}),
+    ("Usdtsellerrajasthan", {"rajasthan"}), ("kota_kit_99", {"kota"}), ("KotaKit", {"kota"}),
+    ("sriganganagarusdt", {"sri_ganganagar"}), ("kotakbank", set()), ("napali_x", set()), ("Geofreyy", set()),
+])
+def test_username_places(name, expected):
+    assert username_places(name) == expected
+
+
+def test_place_in_username_sets_rajasthan_focus():
+    c = dc.Candidate(id=1, username="USDT_BUYER_JAIPUR", title="USDT buyer", kind="broadcast")
+    dc.score_candidate(c, USDT_POSTS, [NOW], cfg()["settings"])
+    assert c.geo_score == round(1 / 3, 3)                         # one post names Jaipur
+    c2 = dc.Candidate(id=2, username="USDT_BUYER_JAIPUR", title="USDT buyer", kind="broadcast")
+    dc.score_candidate(c2, USDT_POSTS[:2], [NOW], cfg()["settings"])
+    assert c2.geo_score == 0 and c2.rajasthan_focus and c2.top_district == "jaipur" and c2.name_places == ["jaipur"]
+
+
+def test_pay_username_counts_for_payout():
+    c = dc.Candidate(id=1, username="dukepay2026", title="Duke", kind="broadcast")
+    dc.score_candidate(c, ["Deposit and withdrawal agents needed, commission per transaction, DM @duke_x",
+                           "Agent recruitment, INR deposit daily, WhatsApp 9829041736"], [NOW], cfg()["settings"])
+    assert c.category == "payout_mule" and c.category_hits["payout_mule"] >= 3
+
+
+def _old_state(tmp_path, cands):
+    import json
+    out = tmp_path / "channels.discovered.yaml"
+    st = {"version": 1, "keywords_done": [], "rows": [], "seeds_done": [], "seeds_failed": [], "candidates": cands}
+    out.with_name(out.stem + ".state.json").write_text(json.dumps(st))
+    return out
+
+
+def test_earlier_channels_get_name_signals_and_unclear_ones_are_reread(tmp_path):
+    base = dict(kind="broadcast", found_by=["keyword 'x'"], role="fraud", posts_sampled=20, label="likely_fraud",
+                score=9.0, inspected=True)
+    old = [dict(base, id=1, username="USDT_BUYER_JAIPUR", title="USDT buyer", category="usdt_p2p"),
+           dict(base, id=2, username="dukepay2026", title="Duke", category="unclear"),
+           dict(base, id=3, username="gone_channel", title="Gone", category="unclear")]
+    for c in old:
+        c.pop("category_hits", None)
+    _old_state(tmp_path, old)
+    client = FakeClient({}, {2: msgs(["Deposit and withdrawal agents needed, commission per transaction",
+                                      "Agent recruitment, payout daily, WhatsApp 9829041736"])},
+                        cached={"dukepay2026": 2})
+    res, out = run(client, cfg(), tmp_path)
+    by = {c["username"]: c for c in yaml.safe_load(out.read_text())["channels"]}
+    assert by["USDT_BUYER_JAIPUR"]["rajasthan_focus"] and by["USDT_BUYER_JAIPUR"]["top_district"] == "jaipur"
+    assert by["USDT_BUYER_JAIPUR"]["category"] == "usdt_p2p"       # had a clear category: not re-read
+    assert by["dukepay2026"]["category"] == "payout_mule"           # re-read once
+    assert by["gone_channel"]["category"] == "unclear"              # not in the cache: no username lookup
+    assert client.calls.count("get_messages") == 1 and "resolve_username" not in client.calls
+    res2, _ = run(client, cfg(), tmp_path)                          # nothing is re-read a second time
+    assert client.calls.count("get_messages") == 1
