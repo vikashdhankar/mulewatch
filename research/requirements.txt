@@ -1,0 +1,11 @@
+# Core: collection, redaction, annotation, splits, TF-IDF baseline, attacks, graph, tests
+telethon>=1.36
+pytesseract>=0.3.10
+pillow>=10.0
+pyyaml>=6.0
+python-dotenv>=1.0
+requests>=2.31
+pandas>=2.0
+scikit-learn>=1.4
+networkx>=3.2
+pytest>=8.0

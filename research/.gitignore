@@ -1,0 +1,10 @@
+# never commit credentials, sessions or collected data
+.env
+*.session
+*.session-journal
+.venv/
+store/
+checkpoints/
+__pycache__/
+*.pyc
+.pytest_cache/
