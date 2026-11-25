@@ -44,11 +44,24 @@ def msgs(texts, days_ago=0):
     return [SimpleNamespace(message=t, date=NOW - timedelta(days=days_ago + i), action=None) for i, t in enumerate(texts)]
 
 
+class FakeSession:
+    """Telethon's on-disk entity cache: knows the usernames in `cached`."""
+
+    def __init__(self, client, cached=()):
+        self.client, self.cached = client, set(cached)
+
+    def get_input_entity(self, username):
+        if username not in self.cached:
+            raise ValueError("not cached")
+        return ("input", username)
+
+
 class FakeClient:
     def __init__(self, search: dict, posts: dict, entities: dict | None = None, flood_once: bool = False,
-                 subscribers: int = 1234):
+                 subscribers: int = 1234, cached=(), flood_seconds: int = 7):
         self.search, self.posts, self.entities = search, posts, entities or {}
-        self.flood_once, self.subscribers = flood_once, subscribers
+        self.flood_once, self.subscribers, self.flood_seconds = flood_once, subscribers, flood_seconds
+        self.session = FakeSession(self, cached)
         self.calls = []
 
     async def __call__(self, req):
@@ -56,17 +69,23 @@ class FakeClient:
         if isinstance(req, SearchRequest):
             if self.flood_once:
                 self.flood_once = False
-                raise FloodWaitError(request=None, capture=7)
+                raise FloodWaitError(request=None, capture=self.flood_seconds)
             return SimpleNamespace(chats=self.search.get(req.q, []), users=[], results=[])
         if isinstance(req, GetFullChannelRequest):
             return SimpleNamespace(full_chat=SimpleNamespace(participants_count=self.subscribers))
         raise AssertionError(f"unexpected request {type(req).__name__}")
 
-    async def get_entity(self, username):
-        self.calls.append("get_entity")
+    async def get_input_entity(self, username):
+        self.calls.append("resolve_username")
         if username not in self.entities:
             raise ValueError("No user has that username")
-        return self.entities[username]
+        return ("input", username)
+
+    async def get_entity(self, inputs):
+        self.calls.append("get_entity")
+        if isinstance(inputs, list):
+            return [self.entities[u] for _, u in inputs]
+        return self.entities[inputs[1]]
 
     async def get_messages(self, entity, limit=30):
         self.calls.append("get_messages")
@@ -86,6 +105,7 @@ async def no_sleep(_):
 
 def run(client, c, tmp_path, **kw):
     out = tmp_path / "channels.discovered.yaml"
+    kw.setdefault("today", "2026-11-25")
     res = asyncio.run(dc.discover(client, c, out, sleep=no_sleep, **kw))
     return res, out
 
@@ -158,7 +178,9 @@ def test_discovery_filters_dedupes_and_labels(tmp_path):
     assert scores == sorted(scores, reverse=True)
     assert res["labels"]["likely_fraud"] == 4
     # read-only: only search, resolve, history and full-channel requests were made
-    assert set(client.calls) <= {"SearchRequest", "get_entity", "get_messages", "GetFullChannelRequest"}
+    assert set(client.calls) <= {"SearchRequest", "resolve_username", "get_entity", "get_messages",
+                                 "GetFullChannelRequest"}
+    assert client.calls.count("get_entity") == 1                  # all seeds in one batched request
 
 
 def test_outputs_have_no_post_text_or_contacts(tmp_path, caplog):
@@ -187,7 +209,7 @@ def test_stops_at_fraud_target(tmp_path):
     client = scenario()
     res, _ = run(client, cfg(["current account kit", "payout account"]), tmp_path, target_fraud=2, target_rajasthan=0)
     assert res["stopped_at_target"]
-    assert [r["keyword"] for r in res["keywords"]] == ["(seed list)", "current account kit"]
+    assert [r["keyword"] for r in res["keywords"]] == ["current account kit"]
     assert client.calls.count("SearchRequest") == 1
 
 
@@ -199,8 +221,9 @@ def test_floodwait_sleeps_and_retries(tmp_path):
     async def rec_sleep(s):
         slept.append(s)
     out = tmp_path / "d.yaml"
-    res = asyncio.run(dc.discover(client, cfg(["current account kit"]), out, sleep=rec_sleep))
+    res = asyncio.run(dc.discover(client, cfg(["current account kit"]), out, sleep=rec_sleep, today="2026-11-25"))
     assert 8 in slept and client.calls.count("SearchRequest") == 2 and res["candidates"] == 3
+    assert any(x >= 20 for x in slept)                            # pace halved after the FloodWait: 10 s -> 20 s
 
 
 def test_rate_limit_spacing(tmp_path):
@@ -210,7 +233,8 @@ def test_rate_limit_spacing(tmp_path):
     async def fake_sleep(s):
         slept.append(s)
         t[0] += s
-    d = dc.Discoverer(scenario(), cfg()["settings"], tp.RateLimiter(20, clock=lambda: t[0], sleep=fake_sleep))
+    budget = dc.DailyBudget(300, {}, "2026-11-25")
+    d = dc.Discoverer(scenario(), cfg()["settings"], tp.RateLimiter(20, clock=lambda: t[0], sleep=fake_sleep), budget)
     asyncio.run(d.search("current account kit", "fraud"))
     asyncio.run(d.search("payout account", "fraud"))
     assert slept == [3.0]                                      # 20 per minute -> 3 s apart
@@ -403,7 +427,7 @@ def test_stop_rule_keeps_searching_rajasthan_until_its_target(tmp_path):
 def test_stops_when_both_targets_met(tmp_path):
     client = raj_scenario()
     res, _ = run(client, raj_cfg(), tmp_path, target_fraud=3, target_rajasthan=0)
-    assert res["stopped_at_target"] and [r["keyword"] for r in res["keywords"]][:2] == ["(seed list)", "kit seller"]
+    assert res["stopped_at_target"] and [r["keyword"] for r in res["keywords"]][:1] == ["kit seller"]
     assert client.calls.count("SearchRequest") == 1 + 2                    # 'kit seller' + both legit keywords
 
 
@@ -414,3 +438,80 @@ def test_report_prints_categories_and_districts(tmp_path):
     text = buf.getvalue()
     assert "per category:" in text and "account_sale" in text and "legit_finance" in text
     assert "per district" in text and "jaipur" in text and "keywords exhausted" in text
+
+
+# ----------------------------------------------------------------------------- pacing, budget, resume
+
+def test_seeds_use_session_cache_before_resolving(tmp_path):
+    seeds = {f"seed_{i}": chan(500 + i, f"seed_{i}") for i in range(4)}
+    client = FakeClient({}, {500 + i: msgs(FRAUD_POSTS) for i in range(4)}, entities=seeds,
+                        cached=["seed_0", "seed_1", "seed_2"])
+    res, _ = run(client, cfg(seeds=list(seeds)), tmp_path)
+    assert client.calls.count("resolve_username") == 1          # only the uncached seed
+    assert client.calls.count("get_entity") == 1 and res["candidates"] == 4
+
+
+def test_daily_budget_pauses_and_next_run_resumes(tmp_path):
+    kws = ["current account kit", "payout account", "bank official"]
+    first, out = run(scenario(), cfg(kws), tmp_path, daily_budget=12, max_new_per_keyword=3)
+    assert first["paused"].startswith("daily budget") and first["requests_today"] <= 12
+    assert first["keywords_done"] == 1                          # 'current account kit' only
+    state = __import__("json").loads(out.with_name(out.stem + ".state.json").read_text())
+    assert state["budget_date"] == "2026-11-25" and state["requests_today"] == first["requests_today"]
+
+    # same day: nothing left, so no requests at all
+    client = scenario()
+    again, _ = run(client, cfg(kws), tmp_path, daily_budget=12, max_new_per_keyword=3)
+    assert again["requests"] == 0 and client.calls == []
+
+    # next day: continues with the remaining keywords, nothing done twice
+    client = scenario()
+    nxt, _ = run(client, cfg(kws), tmp_path, daily_budget=12, max_new_per_keyword=3, today="2026-11-26")
+    assert nxt["finished"] and nxt["keywords_done"] == 3
+    assert client.calls.count("SearchRequest") == 2
+    searched = [r["keyword"] for r in nxt["keywords"]]
+    assert searched.count("current account kit") == 1
+    full, _ = run(scenario(), cfg(kws), tmp_path / "full", daily_budget=300, max_new_per_keyword=3)
+    assert {c for c in full["labels"]} == {c for c in nxt["labels"]} and full["candidates"] == nxt["candidates"]
+
+
+def test_long_floodwait_pauses_without_losing_work(tmp_path):
+    client = scenario()
+    client.flood_once, client.flood_seconds = True, 3600
+    res, out = run(client, cfg(["current account kit"]), tmp_path)
+    assert "wait 3600s" in res["paused"] and res["keywords_done"] == 0
+    assert client.calls.count("SearchRequest") == 1              # no retry; it stopped
+    res2, _ = run(scenario(), cfg(["current account kit"]), tmp_path, today="2026-11-26")
+    assert res2["finished"] and res2["candidates"] == 3
+
+
+def test_new_channels_per_keyword_are_capped(tmp_path):
+    many = [chan(600 + i, f"kit_shop_{i}") for i in range(10)]
+    client = FakeClient({"kit": many}, {c.id: msgs(FRAUD_POSTS) for c in many})
+    res, out = run(client, cfg(["kit"]), tmp_path, max_new_per_keyword=4)
+    assert res["candidates"] == 4 and client.calls.count("get_messages") == 4
+    assert res["keywords"][-1]["capped"] == 6
+
+
+def test_subscriber_count_only_fetched_for_likely_fraud(tmp_path):
+    client = scenario()
+    run(client, cfg(["current account kit", "payout account"], ["bank official"]), tmp_path)
+    # likely_fraud without a count: kit_seller_one, payout_hub, kit_chat_group
+    assert client.calls.count("GetFullChannelRequest") == 3
+
+
+def test_rajasthan_priority_order():
+    kws = [k for _, k in dc.expand_rajasthan({"places": ["jaipur", "tonk", "kota"], "priority_places": ["kota"],
+                                              "suffixes": ["kit"], "hindi_places": ["जयपुर"],
+                                              "hindi_suffixes": ["खाता"]})]
+    assert kws == ["kota kit", "जयपुर खाता", "jaipur kit", "tonk kit"]
+
+
+def test_only_one_telegram_job_at_a_time(tmp_path):
+    lock = str(tmp_path / "t.lock")
+    with tp.telegram_lock(lock):
+        with pytest.raises(SystemExit):
+            with tp.telegram_lock(lock):
+                pass
+    with tp.telegram_lock(lock):                                # released again
+        pass

@@ -67,6 +67,8 @@ fraud:
 # Expanded into "<place> <suffix>" searches (group "rajasthan"), searched after the groups above.
 # Once the likely_fraud target is met, only these keep running until the Rajasthan target is met too.
 rajasthan:
+  # searched first; the other places only if the Rajasthan target is still not met
+  priority_places: [jaipur, jodhpur, kota, bharatpur, alwar, sikar, jhunjhunu]
   places: [jaipur, jodhpur, udaipur, kota, bikaner, bharatpur, sikar, jhunjhunu, ajmer, alwar, bhilwara,
            sri ganganagar, nagaur, pali, barmer, churu, tonk, dausa, chittorgarh, bhiwadi, rajasthan]
   suffixes: [usdt, account, kit, job, earning, trading]
@@ -93,7 +95,7 @@ legit:
 search_limit: 100        # results asked for per keyword (Telegram returns fewer in practice)
 
 scoring:
-  posts_per_channel: 30
+  posts_per_channel: 20  # recent posts read per channel (one request)
   contact_weight: 4.0    # added: share of sampled posts with a phone, UPI ID or Telegram contact x this
   title_weight: 0.5      # cues in the channel title count this much
   post_cap: 10.0         # one post contributes at most this much cue weight

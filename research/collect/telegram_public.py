@@ -17,6 +17,7 @@ API id / hash come from research/.env (TELEGRAM_API_ID, TELEGRAM_API_HASH).
 """
 import argparse
 import asyncio
+import contextlib
 import io
 import json
 import logging
@@ -129,7 +130,7 @@ class ReadOnlyViolation(RuntimeError):
     pass
 
 
-def make_client(session: str, api_id: int, api_hash: str):
+def make_client(session: str, api_id: int, api_hash: str, flood_sleep_threshold: int = 300):
     from telethon import TelegramClient
 
     blocked = blocked_request_types()
@@ -142,8 +143,28 @@ def make_client(session: str, api_id: int, api_hash: str):
                     raise ReadOnlyViolation(f"{type(r).__name__} is not allowed in the research collector")
             return await super().__call__(request, ordered, flood_sleep_threshold)
 
-    # flood_sleep_threshold: Telethon sleeps through FloodWaits up to 5 minutes by itself
-    return ReadOnlyTelegramClient(session, api_id, api_hash, flood_sleep_threshold=300)
+    # flood_sleep_threshold: Telethon sleeps through FloodWaits up to this many seconds by itself
+    return ReadOnlyTelegramClient(session, api_id, api_hash, flood_sleep_threshold=flood_sleep_threshold)
+
+
+@contextlib.contextmanager
+def telegram_lock(path: str = "store/telegram.lock"):
+    """Only one Telegram job (collector or discovery) at a time on this machine."""
+    import fcntl
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        raise SystemExit(f"another Telegram job is running ({path}); wait for it to finish")
+    try:
+        f.write(str(os.getpid()))
+        f.flush()
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
 
 
 def is_public_channel(entity) -> bool:
@@ -299,13 +320,14 @@ async def run(config_path: str, out_path: str, state_path: str) -> None:
     state = load_state(state_file)
     limiter = RateLimiter(cfg["settings"]["requests_per_minute"])
     client = make_client(session, int(api_id), api_hash)
-    async with client:
-        for i, ch in enumerate(cfg["channels"]):
-            if i:
-                await asyncio.sleep(cfg["settings"]["pause_between_channels_s"])
-            key = ch["username"].lower()
-            state[key] = await collect_channel(client, ch, cfg["settings"], limiter, state.get(key, 0), out)
-            save_state(state_file, state)
+    with telegram_lock():
+        async with client:
+            for i, ch in enumerate(cfg["channels"]):
+                if i:
+                    await asyncio.sleep(cfg["settings"]["pause_between_channels_s"])
+                key = ch["username"].lower()
+                state[key] = await collect_channel(client, ch, cfg["settings"], limiter, state.get(key, 0), out)
+                save_state(state_file, state)
 
 
 def main(argv=None):

@@ -3,6 +3,13 @@
     python -m collect.discover_channels --out config/channels.discovered.yaml -v
     python -m collect.discover_channels --dry-run          # show the plan; no Telegram requests
 
+Pace: 6 requests/min and at most 300 requests per calendar day by default. Progress is saved after every
+channel (config/channels.discovered.state.json, git-ignored), so running the same command again the next
+day continues where it stopped; nothing is searched or read twice. If Telegram asks to wait (FloodWait)
+more than --max-flood-wait seconds, the run saves and stops for the day; a shorter wait is waited out and
+the pace halved. At most --max-new-per-keyword new channels are scored per search. Only one Telegram job
+(discovery or collector) can run at a time (store/telegram.lock).
+
 Read-only: it uses the same ReadOnlyTelegramClient as the collector (join, send, forward, read-receipt
 and contact requests are blocked inside the client). It searches Telegram's public directory
 (contacts.SearchRequest), resolves the seed usernames, and reads the last N posts of each candidate.
@@ -44,19 +51,21 @@ set to approved: true whose label is likely_fraud or likely_legit.
 import argparse
 import asyncio
 import csv
+import json
 import logging
 import os
 import re
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import yaml
 
 from collect.rajasthan import places_in
-from collect.telegram_public import RateLimiter, load_config as load_channels_config, make_client, normalize_username
+from collect.telegram_public import (RateLimiter, load_config as load_channels_config, make_client,
+                                     normalize_username, telegram_lock)
 from common.io import load_env
 from common.lang import HINGLISH_MARKERS
 from pii.redact import Redactor
@@ -251,6 +260,7 @@ class Candidate:
     awareness_share: float = 0.0
     seed_group: str = ""
     error: str = ""
+    inspected: bool = False
 
 
 def public_username(entity) -> str | None:
@@ -322,24 +332,58 @@ def score_candidate(c: Candidate, texts: list[str], dates: list[datetime], s: di
 
 # --------------------------------------------------------------------------- telegram calls
 
+class StopForToday(Exception):
+    """Stop cleanly, save state, and continue on the next run (budget used up or Telegram asked to wait)."""
+
+
+class DailyBudget:
+    """Requests per calendar day, remembered in the state file across runs."""
+
+    def __init__(self, limit: int, state: dict, today: str):
+        self.limit, self.state = limit, state
+        if state.get("budget_date") != today:
+            state["budget_date"], state["requests_today"] = today, 0
+
+    @property
+    def used(self) -> int:
+        return self.state["requests_today"]
+
+    @property
+    def remaining(self) -> int:
+        return self.limit - self.used
+
+    def spend(self) -> None:
+        if self.remaining <= 0:
+            raise StopForToday(f"daily budget of {self.limit} requests used")
+        self.state["requests_today"] += 1
+
+
 class Discoverer:
-    def __init__(self, client, settings: dict, limiter: RateLimiter, sleep=asyncio.sleep, max_retries: int = 3):
+    def __init__(self, client, settings: dict, limiter: RateLimiter, budget: DailyBudget, sleep=asyncio.sleep,
+                 max_flood_wait: int = 60, max_retries: int = 3, max_new_per_keyword: int = 15):
         self.client, self.s, self.limiter, self.sleep = client, settings, limiter, sleep
-        self.max_retries = max_retries
+        self.budget, self.max_flood_wait, self.max_retries = budget, max_flood_wait, max_retries
+        self.max_new = max_new_per_keyword
         self.by_id: dict[int, Candidate] = {}
-        self.requests = 0
+        self.requests = 0                            # this run
 
     async def _call(self, fn, *args, **kwargs):
+        """One Telegram request: counted against the daily budget, spaced by the rate limiter. A FloodWait
+        longer than max_flood_wait ends the run for today; a shorter one is waited out and the request
+        rate is halved for the rest of the run."""
         from telethon.errors import FloodWaitError
         for attempt in range(self.max_retries + 1):
+            self.budget.spend()
             await self.limiter.wait()
             self.requests += 1
             try:
                 return await fn(*args, **kwargs)
             except FloodWaitError as e:
-                if attempt == self.max_retries:
-                    raise
-                log.warning("FloodWait %ss; sleeping", e.seconds)
+                if e.seconds > self.max_flood_wait or attempt == self.max_retries:
+                    raise StopForToday(f"Telegram asked to wait {e.seconds}s")
+                self.limiter.interval *= 2
+                log.warning("FloodWait %ss: waiting, then slowing to %.1f requests/min", e.seconds,
+                            60 / self.limiter.interval)
                 await self.sleep(e.seconds + 1)
 
     def _add(self, entity, found_by: str, role: str) -> Candidate | None:
@@ -359,25 +403,69 @@ class Discoverer:
         self.by_id[entity.id] = c
         return c
 
-    async def search(self, q: str, role: str) -> tuple[int, list[Candidate]]:
+    async def search(self, q: str, role: str) -> tuple[int, list[Candidate], int]:
+        """(results, new candidates to inspect, new candidates dropped by the per-keyword cap)."""
         from telethon.tl.functions.contacts import SearchRequest
         found = await self._call(self.client, SearchRequest(q=q, limit=int(self.s["search_limit"])))
         chats = list(getattr(found, "chats", []) or [])
         new = [c for c in (self._add(ch, f"keyword '{q}'", role) for ch in chats) if c]
-        return len(chats), new
+        capped = new[self.max_new:]
+        for c in capped:                             # not scored now; a later keyword may find them again
+            del self.by_id[c.id]
+        return len(chats), new[:self.max_new], len(capped)
 
-    async def seed(self, username: str, group: str = "") -> Candidate | None:
-        try:
-            entity = await self._call(self.client.get_entity, username)
-        except Exception as e:                      # unknown / deleted / private username
-            log.warning("seed %s: %s", username, type(e).__name__)
-            return None
-        c = self._add(entity, "seed list" + (f" (group: {group})" if group else ""), "seed")
-        if c is not None:
-            c.seed_group = group
-        if c is None and entity.id not in self.by_id:
-            log.warning("seed %s: not a public channel or supergroup", username)
-        return c
+    async def _seed_input(self, username: str):
+        """Input peer from Telethon's on-disk entity cache if it has the username (no request), otherwise
+        one ResolveUsername request (these have the tightest daily limit, so the cache matters)."""
+        session = getattr(self.client, "session", None)
+        if session is not None:
+            try:
+                return session.get_input_entity(username)
+            except (ValueError, KeyError, TypeError):
+                pass
+        return await self._call(self.client.get_input_entity, username)
+
+    async def seeds(self, seeds: list[tuple[str, str]]) -> tuple[list[Candidate], list[str]]:
+        """Resolve seeds (cache first) and fetch them in one batched request. Returns (new candidates,
+        usernames that could not be used)."""
+        inputs, failed = [], []
+        for u, g in seeds:
+            try:
+                inputs.append((u, g, await self._seed_input(u)))
+            except StopForToday:
+                raise
+            except Exception as e:                   # unknown / deleted username
+                log.warning("seed %s: %s", u, type(e).__name__)
+                failed.append(u)
+        entities = []
+        if inputs:
+            try:
+                entities = await self._call(self.client.get_entity, [x[2] for x in inputs])
+            except StopForToday:
+                raise
+            except Exception:                        # one bad seed spoils the batch: fetch one by one
+                entities = []
+                for u, _, inp in inputs:
+                    try:
+                        entities.append(await self._call(self.client.get_entity, inp))
+                    except StopForToday:
+                        raise
+                    except Exception as e:
+                        log.warning("seed %s: %s", u, type(e).__name__)
+                        entities.append(None)
+        out = []
+        for (u, g, _), entity in zip(inputs, entities):
+            if entity is None:
+                failed.append(u)
+                continue
+            c = self._add(entity, "seed list" + (f" (group: {g})" if g else ""), "seed")
+            if c is not None:
+                c.seed_group = g
+                out.append(c)
+            elif entity.id not in self.by_id:
+                log.warning("seed %s: not a public channel or supergroup", u)
+                failed.append(u)
+        return out, failed
 
     async def inspect(self, c: Candidate) -> None:
         from telethon.tl.functions.channels import GetFullChannelRequest
@@ -389,21 +477,49 @@ class Discoverer:
             dates = [m.date for m in msgs if getattr(m, "date", None)]
             score_candidate(c, texts, dates, self.s)
             del texts, msgs
-            if c.subscribers is None:
+            # one more request for the subscriber count, only where it matters for review
+            if c.subscribers is None and c.label == "likely_fraud":
                 full = await self._call(self.client, GetFullChannelRequest(channel=entity))
                 c.subscribers = getattr(full.full_chat, "participants_count", None)
+        except StopForToday:
+            raise
         except Exception as e:                      # private since search, banned, history hidden ...
             c.error = type(e).__name__
             c.label = "unclear"
             log.warning("%s: %s", c.username, c.error)
+        c.inspected = True
         log.debug("%-32s %-9s %-12s %-22s score=%5.2f contacts=%.0f%% geo=%.2f posts=%d", c.username, c.kind,
                   c.label, c.category, c.score, 100 * c.contact_share, c.geo_score, c.posts_sampled)
 
     def count(self, label: str | None = None, role: str | None = None, category: str | None = None,
               rajasthan: bool = False) -> int:
-        return sum((label is None or c.label == label) and (role is None or c.role == role)
+        return sum(c.inspected and (label is None or c.label == label) and (role is None or c.role == role)
                    and (category is None or c.category == category) and (not rajasthan or c.rajasthan_focus)
                    for c in self.by_id.values())
+
+
+# --------------------------------------------------------------------------- state
+
+STATE_VERSION = 1
+
+
+def load_state(path: Path) -> dict:
+    if path.exists():
+        st = json.loads(path.read_text(encoding="utf-8"))
+        if st.get("version") == STATE_VERSION:
+            return st
+        log.warning("%s has an old format; starting fresh", path)
+    return {"version": STATE_VERSION, "keywords_done": [], "rows": [], "candidates": [], "seeds_done": [],
+            "seeds_failed": []}
+
+
+def save_state(path: Path, state: dict, d: "Discoverer") -> None:
+    state["candidates"] = [asdict(c) for c in d.by_id.values() if c.inspected]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(path)
 
 
 # --------------------------------------------------------------------------- config / output
@@ -428,15 +544,21 @@ def load_seeds(*paths) -> list[tuple[str, str]]:
 
 
 def expand_rajasthan(spec: dict) -> list[tuple[str, str]]:
-    kws = [f"{p} {s}" for p in spec.get("places", []) for s in spec.get("suffixes", [])]
+    """'<place> <suffix>' searches: priority places first, then the Hindi ones, then the rest. With the stop
+    rule this means the smaller places are only searched if the Rajasthan target is not met yet."""
+    places = spec.get("places", [])
+    first = [x for x in spec.get("priority_places", []) if x in places]
+    rest = [x for x in places if x not in first]
+    kws = [f"{p} {s}" for p in first for s in spec.get("suffixes", [])]
     kws += [f"{p} {s}" for p in spec.get("hindi_places", []) for s in spec.get("hindi_suffixes", [])]
+    kws += [f"{p} {s}" for p in rest for s in spec.get("suffixes", [])]
     return [("rajasthan", k) for k in kws]
 
 
 def load_discovery_config(keywords_path, seeds_path, extra_seeds_path=None) -> dict:
     kw = yaml.safe_load(Path(keywords_path).read_text(encoding="utf-8")) or {}
     seeds = load_seeds(seeds_path, extra_seeds_path)
-    scoring = {"posts_per_channel": 30, "contact_weight": 4.0, "title_weight": 0.5, "post_cap": 10.0,
+    scoring = {"posts_per_channel": 20, "contact_weight": 4.0, "title_weight": 0.5, "post_cap": 10.0,
                "likely_fraud": 5.0, "likely_legit": 2.0, "rajasthan_focus": 0.2, **(kw.get("scoring") or {})}
     if scoring["likely_legit"] > scoring["likely_fraud"]:
         raise ValueError("scoring.likely_legit must not be above scoring.likely_fraud")
@@ -500,81 +622,130 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
                         "found_by": "; ".join(c.found_by), "label": c.label, "kind": c.kind, "approved": False})
     with open(out.with_name(out.stem + ".keywords.csv"), "w", newline="", encoding="utf-8") as f:
         cols = ["role", "group", "keyword", "results", "new_public", "likely_fraud", "unclear", "likely_legit",
-                "rajasthan_focus", "legit_finance"]
-        w = csv.DictWriter(f, fieldnames=cols)
+                "rajasthan_focus", "legit_finance", "capped"]
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(keyword_rows)
 
 
 # --------------------------------------------------------------------------- run
 
-async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_target: int = 20,
-                   rpm: float = 20, collector_settings: dict | None = None, sleep=asyncio.sleep,
-                   target_rajasthan: int = 25) -> dict:
-    s = cfg["settings"]
-    d = Discoverer(client, s, RateLimiter(rpm, sleep=sleep), sleep=sleep)
-    rows: list[dict] = []
-    collector_settings = collector_settings or {}
+def _kw_key(role: str, kw: str) -> str:
+    return f"{role}|{kw.lower()}"
 
-    def row(role, group, kw, n_results, new):
+
+async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_target: int = 20,
+                   rpm: float = 6, collector_settings: dict | None = None, sleep=asyncio.sleep,
+                   target_rajasthan: int = 25, state_path: Path | None = None, daily_budget: int = 300,
+                   max_new_per_keyword: int = 15, max_flood_wait: int = 60, today: str | None = None) -> dict:
+    s = cfg["settings"]
+    state_path = Path(state_path or out.with_name(out.stem + ".state.json"))
+    state = load_state(state_path)
+    budget = DailyBudget(daily_budget, state, today or date.today().isoformat())
+    d = Discoverer(client, s, RateLimiter(rpm, sleep=sleep), budget, sleep=sleep, max_flood_wait=max_flood_wait,
+                   max_new_per_keyword=max_new_per_keyword)
+    for cd in state["candidates"]:                   # resume: channels scored on earlier runs are not re-read
+        c = Candidate(**cd)
+        d.by_id[c.id] = c
+    rows: list[dict] = state["rows"]
+    collector_settings = collector_settings or {}
+    # a keyword costs 1 search + up to max_new history reads + a few subscriber counts: start it only if
+    # the day's budget can cover it, so it is never left half done
+    reserve = 1 + max_new_per_keyword + 3
+
+    def row(role, group, kw, n_results, new, capped=0):
         labels = Counter(c.label for c in new)
         rows.append({"role": role, "group": group, "keyword": kw, "results": n_results, "new_public": len(new),
                      **{k: labels.get(k, 0) for k in ("likely_fraud", "unclear", "likely_legit")},
                      "rajasthan_focus": sum(c.rajasthan_focus for c in new),
-                     "legit_finance": sum(c.category == "legit_finance" for c in new)})
-        write_outputs(out, list(d.by_id.values()), rows, s, collector_settings)
+                     "legit_finance": sum(c.category == "legit_finance" for c in new), "capped": capped})
 
-    seeds = [c for c in [await d.seed(u, g) for u, g in cfg["seeds"]] if c]
-    for c in seeds:
-        await d.inspect(c)
-    row("seed", "seeds", "(seed list)", len(cfg["seeds"]), seeds)
+    def checkpoint():
+        save_state(state_path, state, d)
+        write_outputs(out, [c for c in d.by_id.values() if c.inspected], rows, s, collector_settings)
 
-    stopped, skipped = False, 0
+    stopped, skipped, reason = False, 0, ""
     fraud_done = lambda: d.count("likely_fraud") >= target_fraud  # noqa: E731
     raj_done = lambda: d.count("likely_fraud", rajasthan=True) >= target_rajasthan  # noqa: E731
-    for group, kw in cfg["fraud"]:
-        if fraud_done() and raj_done():
-            stopped = True
-            log.info("reached %d likely_fraud (%d Rajasthan-focused); stopping fraud keywords",
-                     d.count("likely_fraud"), d.count("likely_fraud", rajasthan=True))
-            break
-        if fraud_done() and group != "rajasthan":   # only Rajasthan searches still help
-            skipped += 1
-            continue
-        n, new = await d.search(kw, "fraud")
-        for c in new:
-            await d.inspect(c)
-        log.info("[%s] %-32s results=%3d new=%3d  -> fraud %d / unclear %d / legit %d", group, kw, n, len(new),
-                 *(sum(c.label == k for c in new) for k in ("likely_fraud", "unclear", "likely_legit")))
-        row("fraud", group, kw, n, new)
+    try:
+        done_seeds = {u.lower() for u in state["seeds_done"] + state["seeds_failed"]}
+        pending = [(u, g) for u, g in cfg["seeds"] if u.lower() not in done_seeds]
+        if pending:
+            new, failed = await d.seeds(pending)
+            for c in new:
+                await d.inspect(c)
+                checkpoint()
+            state["seeds_done"] += [u for u, _ in pending if u not in failed]
+            state["seeds_failed"] += failed
+            row("seed", "seeds", "(seed list)", len(pending), new)
+            checkpoint()
 
-    for group, kw in cfg["legit"]:
-        if d.count(category="legit_finance") >= legit_target:
-            break
-        n, new = await d.search(kw, "legit")
-        for c in new:
-            await d.inspect(c)
-        log.info("[legit] %-30s results=%3d new=%3d  -> legit_finance %d", kw, n, len(new),
-                 sum(c.category == "legit_finance" for c in new))
-        row("legit", group, kw, n, new)
+        for role, keywords in (("fraud", cfg["fraud"]), ("legit", cfg["legit"])):
+            for group, kw in keywords:
+                if role == "fraud":
+                    if fraud_done() and raj_done():
+                        stopped = True
+                        break
+                    if fraud_done() and group != "rajasthan":    # only Rajasthan searches still help
+                        skipped += 1
+                        continue
+                elif d.count(category="legit_finance") >= legit_target:
+                    break
+                if _kw_key(role, kw) in state["keywords_done"]:
+                    continue
+                if budget.remaining < reserve:
+                    raise StopForToday(f"daily budget nearly used ({budget.used}/{daily_budget})")
+                n, new, capped = await d.search(kw, role)
+                for c in new:
+                    await d.inspect(c)
+                    checkpoint()
+                state["keywords_done"].append(_kw_key(role, kw))
+                row(role, group, kw, n, new, capped)
+                checkpoint()
+                log.info("[%s] %-32s results=%3d new=%3d%s -> fraud %d / unclear %d / legit %d | total fraud %d "
+                         "(raj %d), legit_finance %d | budget %d/%d", group, kw, n, len(new),
+                         f" (+{capped} capped)" if capped else "",
+                         *(sum(c.label == k for c in new) for k in ("likely_fraud", "unclear", "likely_legit")),
+                         d.count("likely_fraud"), d.count("likely_fraud", rajasthan=True),
+                         d.count(category="legit_finance"), budget.used, daily_budget)
+            if stopped and role == "fraud":
+                log.info("targets reached: %d likely_fraud (%d Rajasthan-focused)", d.count("likely_fraud"),
+                         d.count("likely_fraud", rajasthan=True))
+    except StopForToday as e:
+        reason = str(e)
+        log.warning("stopping for today: %s. Run the same command again later to continue.", reason)
+    finally:
+        for cid in [c.id for c in d.by_id.values() if not c.inspected]:   # half-done keyword: redo next run
+            del d.by_id[cid]
+        checkpoint()
 
-    write_outputs(out, list(d.by_id.values()), rows, s, collector_settings)
-    cands = list(d.by_id.values())
+    cands = [c for c in d.by_id.values() if c.inspected]
     fraud = [c for c in cands if c.label == "likely_fraud"]
+    all_done = not reason
     return {"labels": Counter(c.label for c in cands), "categories": Counter(c.category for c in cands),
             "districts": Counter(c.top_district for c in cands if c.rajasthan_focus),
             "districts_fraud": Counter(c.top_district for c in fraud if c.rajasthan_focus),
             "rajasthan_fraud": sum(c.rajasthan_focus for c in fraud),
             "legit_finance": sum(c.category == "legit_finance" for c in cands),
-            "keywords": rows, "requests": d.requests, "stopped_at_target": stopped, "skipped_keywords": skipped,
+            "keywords": rows, "requests": d.requests, "requests_today": budget.used, "daily_budget": daily_budget,
+            "stopped_at_target": stopped, "skipped_keywords": skipped, "paused": reason, "finished": all_done,
+            "keywords_done": len(state["keywords_done"]), "keywords_total": len(cfg["fraud"]) + len(cfg["legit"]),
             "candidates": len(cands), "targets": {"fraud": target_fraud, "rajasthan": target_rajasthan,
                                                    "legit_finance": legit_target}}
 
 
 def print_report(result: dict, out: Path, stream=sys.stdout) -> None:
     p = lambda *a: print(*a, file=stream)  # noqa: E731
-    p(f"\n{result['candidates']} candidates, {result['requests']} Telegram requests"
-      + (" (stopped: likely_fraud target reached)" if result["stopped_at_target"] else " (keywords exhausted)"))
+    if result.get("paused"):
+        status = f"paused: {result['paused']}; run the same command again (tomorrow for the budget) to continue"
+    elif result["stopped_at_target"]:
+        status = "finished: targets reached"
+    else:
+        status = "finished: keywords exhausted"
+    p(f"\n{status}")
+    p(f"{result['candidates']} candidates scored so far; keywords searched {result.get('keywords_done', 0)}/"
+      f"{result.get('keywords_total', 0)}; requests this run {result['requests']}, today "
+      f"{result.get('requests_today', 0)}/{result.get('daily_budget', 0)}")
     t = result.get("targets", {})
     p("\nper label:")
     for k in ("likely_fraud", "unclear", "likely_legit"):
@@ -599,25 +770,34 @@ def print_report(result: dict, out: Path, stream=sys.stdout) -> None:
 
 
 def dry_run(cfg: dict, target_fraud: int, legit_target: int, rpm: float, stream=sys.stdout,
-            target_rajasthan: int = 25) -> None:
+            target_rajasthan: int = 25, daily_budget: int = 300, max_new: int = 15,
+            state: dict | None = None) -> None:
     s = cfg["settings"]
     p = lambda *a: print(*a, file=stream)  # noqa: E731
     p("dry run: no Telegram requests are made, nothing is written")
     p(f"  seeds: {len(cfg['seeds'])}  fraud keywords: {len(cfg['fraud'])}  legit keywords: {len(cfg['legit'])}")
     for g, n in Counter(g for g, _ in cfg["fraud"]).items():
         p(f"    {g}: {n}")
-    p(f"  per keyword: 1 search (limit {s['search_limit']}), then per new candidate 1 history read of "
-      f"{s['posts_per_channel']} posts (+1 if the subscriber count is missing)")
+    p(f"  per keyword: 1 search, then 1 history read of {s['posts_per_channel']} posts for each of at most "
+      f"{max_new} new channels (+1 for the subscriber count of likely_fraud ones that lack it)")
+    p(f"  seeds: looked up from the session cache where possible, then fetched in one batched request")
     p(f"  seed groups: {dict(Counter(g or '-' for _, g in cfg['seeds']))}")
     p(f"  stop: {target_fraud} likely_fraud incl. {target_rajasthan} rajasthan_focus, or keywords exhausted; "
       f"then legit keywords until {legit_target} legit_finance")
     p(f"  labels: likely_fraud if score >= {s['likely_fraud']}, likely_legit if < {s['likely_legit']}")
     n_kw = len(cfg["fraud"]) + len(cfg["legit"])
-    p(f"  rate: {rpm} requests/min -> {n_kw} searches ~ {round(n_kw / rpm)} min, plus ~1 min per 20 new candidates")
+    p(f"  pace: {rpm} requests/min, at most {daily_budget} requests a day (~{round(daily_budget / rpm)} min); "
+      f"a FloodWait over the limit pauses until the next run")
+    if state:
+        p(f"  resume: {len(state.get('keywords_done', []))}/{n_kw} keywords done, "
+          f"{len(state.get('candidates', []))} channels scored, "
+          f"{state.get('requests_today', 0) if state.get('budget_date') == date.today().isoformat() else 0} "
+          f"requests used today")
 
 
 async def _connect(session: str, api_id: int, api_hash: str):
-    client = make_client(session, api_id, api_hash)
+    # flood_sleep_threshold=0: every FloodWait reaches Discoverer._call, which decides to wait or pause
+    client = make_client(session, api_id, api_hash, flood_sleep_threshold=0)
     await client.connect()
     if not await client.is_user_authorized():
         if sys.stdin.isatty():
@@ -634,8 +814,13 @@ async def run(args) -> None:
     collector_settings = load_channels_config(args.channels_config)["settings"] \
         if Path(args.channels_config).exists() else {}
     out = Path(args.out)
+    state_path = Path(args.state or out.with_name(out.stem + ".state.json"))
+    if args.fresh and state_path.exists() and not args.dry_run:
+        state_path.unlink()
     if args.dry_run:
-        dry_run(cfg, args.target_fraud, args.legit_target, args.rpm, target_rajasthan=args.target_rajasthan)
+        dry_run(cfg, args.target_fraud, args.legit_target, args.rpm, target_rajasthan=args.target_rajasthan,
+                daily_budget=args.daily_budget, max_new=args.max_new_per_keyword,
+                state=None if args.fresh else load_state(state_path))
         return
     load_env()
     api_id, api_hash = os.environ.get("TELEGRAM_API_ID"), os.environ.get("TELEGRAM_API_HASH")
@@ -643,16 +828,19 @@ async def run(args) -> None:
         raise SystemExit("set TELEGRAM_API_ID and TELEGRAM_API_HASH in research/.env")
     session = os.environ.get("TELEGRAM_SESSION", "store/telegram_research.session")
     Path(session).parent.mkdir(parents=True, exist_ok=True)
-    client = await _connect(session, int(api_id), api_hash)
-    try:
-        if args.login:
-            me = await client.get_me()
-            print(f"logged in (user id {me.id}); session saved to {session}")
-            return
-        result = await discover(client, cfg, out, args.target_fraud, args.legit_target, args.rpm, collector_settings,
-                                target_rajasthan=args.target_rajasthan)
-    finally:
-        await client.disconnect()
+    with telegram_lock():
+        client = await _connect(session, int(api_id), api_hash)
+        try:
+            if args.login:
+                me = await client.get_me()
+                print(f"logged in (user id {me.id}); session saved to {session}")
+                return
+            result = await discover(client, cfg, out, args.target_fraud, args.legit_target, args.rpm,
+                                    collector_settings, target_rajasthan=args.target_rajasthan, state_path=state_path,
+                                    daily_budget=args.daily_budget, max_new_per_keyword=args.max_new_per_keyword,
+                                    max_flood_wait=args.max_flood_wait)
+        finally:
+            await client.disconnect()
     print_report(result, out)
 
 
@@ -666,13 +854,21 @@ def main(argv=None):
     ap.add_argument("--target-fraud", type=int, default=100, help="stop fraud keywords once this many likely_fraud")
     ap.add_argument("--target-rajasthan", type=int, default=25, help="of the likely_fraud, rajasthan_focus")
     ap.add_argument("--legit-target", type=int, default=20, help="legit_finance negatives")
-    ap.add_argument("--rpm", type=float, default=20, help="Telegram requests per minute")
+    ap.add_argument("--rpm", type=float, default=6, help="Telegram requests per minute (at most 20)")
+    ap.add_argument("--daily-budget", type=int, default=300, help="requests per calendar day, across runs")
+    ap.add_argument("--max-new-per-keyword", type=int, default=15, help="new channels scored per search")
+    ap.add_argument("--max-flood-wait", type=int, default=60,
+                    help="pause until the next run if Telegram asks to wait longer than this (seconds)")
+    ap.add_argument("--state", default="", help="resume file (default: next to --out, git-ignored)")
+    ap.add_argument("--fresh", action="store_true", help="ignore saved progress and start over")
     ap.add_argument("--dry-run", action="store_true", help="print the plan without contacting Telegram")
     ap.add_argument("--login", action="store_true", help="log the research account in (interactive) and exit")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     if not 0 < args.rpm <= 20:
         raise SystemExit("--rpm must be between 0 and 20")
+    if not 0 < args.daily_budget <= 1000:
+        raise SystemExit("--daily-budget must be between 1 and 1000")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(message)s")
     logging.getLogger("telethon").setLevel(logging.WARNING)
     asyncio.run(run(args))

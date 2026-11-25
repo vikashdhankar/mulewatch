@@ -55,6 +55,35 @@ Each post is stored with its post id, channel, date (UTC), text, media type, OCR
 most), with a pause between channels; FloodWaits up to 5 minutes are slept through, longer ones stop
 that channel until the next run.
 
+**1a. Discover channels (optional).** Finds candidate channels for `channels.yaml`, read-only:
+
+```bash
+python -m collect.discover_channels --login            # once, in a terminal (phone + code)
+python -m collect.discover_channels --dry-run          # the plan, no requests
+python -m collect.discover_channels -v                 # run daily until it reports "finished"
+```
+
+It searches Telegram's public directory for the keywords in `config/discovery_keywords.yaml` (English,
+Hinglish, Hindi, crypto, Rajasthan places) and the seeds in `config/discovery_seeds.yaml` plus
+`store/discovery_seeds.yaml`. It reads the last 20 posts of each new public channel and keeps only
+aggregates: score, category, Rajasthan geo score, language mix, the share of posts with a contact (counted,
+never stored), subscribers and last post. Results go to `config/channels.discovered.{yaml,csv}`
+(git-ignored), every entry with `approved: false`. The collector reads only the entries you set to
+`approved: true` that are labelled `likely_fraud` or `likely_legit`.
+
+It goes easy on Telegram on purpose:
+- 6 requests a minute, and at most 300 a day across runs. Progress is saved after every channel, so the
+  next day's run continues where the last one stopped and nothing is read twice.
+- A FloodWait longer than 60 s pauses discovery until the next run. A shorter one is waited out, and
+  the pace is halved for the rest of the run.
+- Seeds are looked up in the session cache before any username lookup is sent.
+- At most 15 new channels are scored per keyword.
+- Rajasthan searches start with the main districts.
+- Only one Telegram job (discovery or collector) can run at a time.
+
+Use the official API with one research account. Don't use extra accounts, proxies or timing tricks to get
+around Telegram's limits.
+
 **2. Redact.**
 
 ```bash
