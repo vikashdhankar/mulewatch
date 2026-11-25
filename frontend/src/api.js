@@ -69,6 +69,18 @@ export const api = {
   analyzeUrl: (url, save) => req("/api/analyze/url", json("POST", { url, save })),
   graph: (params = {}) => req("/api/graph?" + qs(params)),
   alerts: () => req("/api/alerts"),
+  decideAlert: (id, decision, note = "") => req(`/api/alerts/${id}/decision`, json("POST", { decision, note })),
+  decideQueue: (pid, decision, note = "") => req(`/api/watcher/queue/${pid}/decision`, json("POST", { decision, note })),
+  evidencePdf: (id) => download(`/api/posts/${id}/evidence-pack.pdf`),
+
+  // real-time Telegram watcher
+  watcherHealth: () => req("/api/watcher/health"),
+  watcherPause: (paused) => req("/api/watcher/pause", json("POST", { paused })),
+  watcherAlerts: (params = {}) => req("/api/watcher/alerts?" + qs(params)),
+  watcherEntities: () => req("/api/watcher/entities"),
+  watcherEntity: (hash) => req(`/api/watcher/entities/${encodeURIComponent(hash)}`),
+  watcherBursts: (channel) => req("/api/watcher/bursts?" + qs({ channel })),
+  watcherExport: () => req("/api/watcher/feedback/export", { method: "POST" }),
   alertsSeen: () => req("/api/alerts/seen", { method: "POST" }),
 
   // complaints, map, audit, brief

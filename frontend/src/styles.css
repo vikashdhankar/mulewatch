@@ -527,3 +527,9 @@ td.nowrap, .nowrap { white-space: nowrap; }
 .disc-add label:first-child { flex: 2 1 260px; }
 .disc-q { white-space: normal; word-break: break-word; font-size: 12.5px; }
 tr.muted td { opacity: .55; }
+
+/* Telegram watcher: decisions on alerts */
+.decision-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.decision-btns .btn.on:not(.btn-confirm):not(.btn-fp) { background: #b7791f; border-color: #b7791f; color: #fff; }
+.post-row .row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.post-row .ring-ids { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }

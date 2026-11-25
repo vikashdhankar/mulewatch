@@ -19,12 +19,14 @@ import Officers from "./pages/Officers";
 import Profile from "./pages/Profile";
 import Sources from "./pages/Sources";
 import Discovery from "./pages/Discovery";
+import Watcher from "./pages/Watcher";
 import Watchlist from "./pages/Watchlist";
 
 // [path, label, icon, minimum role]
 const NAV = [
   ["/", "Command center", "radar", "ANALYST"],
   ["/cases", "Cases", "cases", "ANALYST"],
+  ["/watcher", "Telegram watcher", "bell", "ANALYST"],
   ["/network", "Seller network", "graph", "ANALYST"],
   ["/map", "District map", "map", "ANALYST"],
   ["/complaints", "Victim complaints", "file", "IO"],
@@ -165,6 +167,7 @@ export default function App() {
             <Route path="/map" element={<MapPage />} />
             <Route path="/complaints" element={<Complaints />} />
             <Route path="/analyze" element={<Analyze />} />
+            <Route path="/watcher" element={<Watcher />} />
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/sources" element={<Sources />} />
             <Route path="/brief" element={<Brief />} />

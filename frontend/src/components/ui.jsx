@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { caseId, inr, STATUS, timeAgo } from "../api";
+import { api, caseId, inr, STATUS, timeAgo } from "../api";
 import { useT } from "../i18n";
 
 export function Icon({ name, size = 18 }) {
@@ -226,4 +227,30 @@ export function Modal({ title, onClose, children, wide }) {
 
 export function Empty({ title, children }) {
   return <div className="empty"><strong>{title}</strong>{children && <p>{children}</p>}</div>;
+}
+
+const DECISIONS = [["confirm", "Confirm", "btn-confirm"], ["false_alarm", "False alarm", "btn-fp"], ["needs_info", "Needs info", ""]];
+
+/** Confirm / False alarm / Needs info on an alert (alertId) or on a review-queue case without an alert (postId).
+    Every click is stored with the reviewer and time; the latest one is highlighted. */
+export function DecisionButtons({ alertId, postId, current, onDone }) {
+  const { t } = useT();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const decide = async (d) => {
+    setBusy(true); setErr("");
+    try {
+      const r = alertId ? await api.decideAlert(alertId, d) : await api.decideQueue(postId, d);
+      onDone && onDone(r);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <span className="decision-btns">
+      {DECISIONS.map(([d, label, cls]) => (
+        <button key={d} type="button" disabled={busy} aria-pressed={current === d}
+          className={`btn btn-sm ${cls}${current === d ? " on" : ""}`}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); decide(d); }}>{t(label)}</button>))}
+      {err && <span className="err small">{err}</span>}
+    </span>
+  );
 }

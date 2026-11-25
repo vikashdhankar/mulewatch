@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "../i18n";
 import { api, caseId, timeAgo } from "../api";
-import { Icon, RiskBadge } from "../components/ui";
+import { DecisionButtons, Icon, RiskBadge } from "../components/ui";
 import { useLive } from "../live";
 import { Link } from "react-router-dom";
 import { BotPanel } from "../components/ReportBot";
@@ -67,7 +67,9 @@ export default function Sources() {
             <Link key={a.id} to={`/case/${a.post_id}`} className="alert-row">
               <RiskBadge level={a.level} />
               <div><strong>{caseId(a.post_id)}</strong> <span className="muted small">{timeAgo(a.created_at)}{a.channel === "telegram" && (a.delivered ? ` · ${t("sent to Telegram")}` : ` · ${t("Telegram pending")}`)}</span>
-                <div className="small">{a.reason}</div></div>
+                <div className="small">{a.reason}</div>
+                <DecisionButtons alertId={a.id} current={a.decision?.decision} onDone={() => api.alerts().then(setAlerts)} />
+                {a.decision && <div className="muted small">{t("{d} by {who}, {when}", { d: t({ confirm: "confirmed", false_alarm: "false alarm", needs_info: "needs info" }[a.decision.decision]), who: a.decision.reviewer, when: timeAgo(a.decision.at) })}</div>}</div>
             </Link>
           )) : <p className="muted">{t("No alerts yet.")}</p>}
         </section>
