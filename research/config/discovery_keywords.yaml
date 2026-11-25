@@ -1,0 +1,65 @@
+# Keywords for collect/discover_channels.py. Each one is sent to Telegram's public search
+# (contacts.SearchRequest), which returns public channels and groups whose name or username matches.
+fraud:
+  english:
+    - current account kit
+    - corporate account
+    - savings account sale
+    - bank account sell
+    - account kit available
+    - payout account
+    - payin payout
+    - gaming payout
+    - betting payout
+    - rbl account
+    - mule account
+    - account on rent
+    - rent your bank account
+    - kyc account
+    - sim card sale
+    - debit card sale
+    - atm card kit
+    - net banking kit
+    - usdt to inr
+    - usdt payout
+    - upi account sale
+    - merchant account
+    - gateway account
+    - escrow account india
+    - fresh account kit
+    - old account sale
+  hinglish:
+    - khata kiraye par
+    - account kiraye pe
+    - khata becho
+    - account bechna
+    - ghar baithe kamai
+    - part time job daily payment
+    - task job telegram
+    - work from home daily income
+    - commission per transaction
+  hindi:
+    - खाता किराये पर
+    - बैंक खाता बेचें
+    - करंट अकाउंट किट
+    - पार्ट टाइम जॉब
+    - घर बैठे कमाई
+
+# Searched after the fraud keywords to find legitimate finance channels as negatives.
+legit:
+  english:
+    - bank official
+    - rbi
+    - sebi
+    - personal finance india
+    - stock market news
+
+search_limit: 100        # results asked for per keyword (Telegram returns fewer in practice)
+
+scoring:
+  posts_per_channel: 30
+  contact_weight: 4.0    # added: share of sampled posts with a phone, UPI ID or Telegram contact x this
+  title_weight: 0.5      # cues in the channel title count this much
+  post_cap: 10.0         # one post contributes at most this much cue weight
+  likely_fraud: 5.0      # score >= this -> likely_fraud
+  likely_legit: 2.0      # score < this -> likely_legit; in between -> unclear

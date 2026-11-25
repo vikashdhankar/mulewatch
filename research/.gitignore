@@ -8,3 +8,6 @@ checkpoints/
 __pycache__/
 *.pyc
 .pytest_cache/
+# discovery output (candidate channels, for human review) and local configs
+config/channels.discovered*
+config/*.local.yaml

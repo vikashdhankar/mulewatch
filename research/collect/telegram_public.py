@@ -1,6 +1,7 @@
 """Read posts from public Telegram channels listed in config/channels.yaml.
 
     python -m collect.telegram_public --config config/channels.yaml --out store/raw/telegram.jsonl
+    python -m collect.telegram_public --config config/channels.discovered.yaml   # approved entries only
 
 What it does and does not do:
   * reads message history of public broadcast channels that have an @username, without joining them;
@@ -52,6 +53,18 @@ def normalize_username(entry: str) -> str:
     return s
 
 
+COLLECTABLE_LABELS = {"likely_fraud", "likely_legit"}
+
+
+def is_approved(item: dict) -> bool:
+    """Entries written by discover_channels carry a label and approved: false. They are collected only
+    after a person sets approved: true, and only if labelled likely_fraud or likely_legit. Entries
+    added to channels.yaml by hand (no label, no approved key) were chosen by a person already."""
+    if "approved" not in item and "label" not in item:
+        return True
+    return item.get("approved") is True and item.get("label") in COLLECTABLE_LABELS
+
+
 def load_config(path) -> dict:
     cfg = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     settings = {"max_posts_per_channel": 5000, "requests_per_minute": 20, "pause_between_channels_s": 10,
@@ -62,6 +75,8 @@ def load_config(path) -> dict:
     channels, seen = [], set()
     for item in cfg.get("channels") or []:
         item = {"username": item} if isinstance(item, str) else dict(item)
+        if not is_approved(item):
+            continue
         name = normalize_username(item.get("username", ""))
         if name.lower() in seen:
             continue
@@ -69,7 +84,8 @@ def load_config(path) -> dict:
         since = item.get("since")
         if isinstance(since, str):
             since = date.fromisoformat(since)
-        channels.append({"username": name, "since": since, "reason": item.get("reason", "")})
+        channels.append({"username": name, "since": since, "reason": item.get("reason", ""),
+                         "label": item.get("label")})
     return {"channels": channels, "settings": settings}
 
 
@@ -250,7 +266,10 @@ async def collect_channel(client, ch: dict, settings: dict, limiter: RateLimiter
                 data = await client.download_media(msg, file=bytes)
                 ocr = ocr_bytes(data, settings["ocr_lang"]) if data else ""
                 del data
-            batch.append(to_record(msg, name, ocr))
+            rec = to_record(msg, name, ocr)
+            if ch.get("label"):
+                rec["channel_label"] = ch["label"]      # discovery label: likely_fraud / likely_legit
+            batch.append(rec)
             newest = max(newest, msg.id)
             n += 1
             if len(batch) >= 100:
