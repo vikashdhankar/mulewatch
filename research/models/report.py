@@ -58,7 +58,8 @@ def build(results_dir=RESULTS_DIR) -> None:
             lr[f"n_{lang}"] = runs[0]["per_language"].get(lang, {}).get("n", 0)
         lang_rows.append(lr)
     write_table("main_results", main_rows, caption="Baselines: macro-F1, latency and cost per 1,000 posts",
-                results_dir=results_dir, bold_max=["macro_f1", "suspicious_f1"])
+                results_dir=results_dir, bold_max=["macro_f1", "suspicious_f1"],
+                col_digits={"ms_per_post": 1, "p95_ms": 1, "usd_per_1k": 4, "train_min": 1})
     write_table("per_class_f1", class_rows, caption="Per-class F1", results_dir=results_dir, bold_max=CLASSES)
     write_table("per_language_f1", lang_rows, caption="Macro-F1 by language", results_dir=results_dir,
                 bold_max=LANGUAGES)
