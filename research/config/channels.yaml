@@ -1,0 +1,19 @@
+# Public Telegram channels to collect from. Only public broadcast channels with an @username are read:
+# invite links, private channels and groups are refused by the collector.
+#
+# Add a channel only after checking it is public and relevant, and write down why (for the ethics log).
+# Example entry:
+#
+#   - username: some_public_channel     # without @ or t.me/
+#     reason: "found by MuleWatch discovery on 2026-11-20, posts current-account kits"
+#     since: 2025-01-01                 # optional: oldest post date to read
+#
+channels: []
+
+settings:
+  max_posts_per_channel: 5000     # per run
+  requests_per_minute: 20         # history pages + image downloads, all channels together
+  pause_between_channels_s: 10
+  ocr_images: true
+  ocr_lang: hin+eng
+  max_image_bytes: 5000000        # bigger images are not downloaded
