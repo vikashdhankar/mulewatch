@@ -59,13 +59,18 @@ def mixed(markup: str, bold_base: bool = False) -> str:
         for tok in re.split(r"(&[#a-zA-Z0-9]+;|\s+)", part):
             if not tok:
                 continue
-            if tok.isspace() or (tok.startswith("&") and tok.endswith(";")):
+            if tok.isspace():
                 out.append(tok)
+                continue
+            if tok.startswith("&") and tok.endswith(";"):          # &lt; &amp; ...: ASCII, so the Latin font
+                out.append(f'<font name="{face}">{tok}</font>')
                 continue
             # a word with no Devanagari in it goes wholly into the Latin font: the shaper can't handle a
             # bold word whose letters come from two fonts, e.g. "79(3)(b)"
             if not any("\u0900" <= ch <= "\u097f" for ch in tok):
-                if any((ch.isascii() and ch.isalpha()) or ord(ch) not in deva for ch in tok):
+                # all of it, digits and punctuation too: the shaper treats text up to the next space as one word,
+                # also across a tag ("[field]," after a highlight), and a word drawn in two fonts gets wrong glyphs
+                if any(ch.isascii() or ord(ch) not in deva for ch in tok):
                     out.append(f'<font name="{face}">{tok}</font>')
                 else:
                     out.append(tok)
