@@ -15,11 +15,11 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 
-from .config import MEDIA_DIR
+from .config import MEDIA_DIR, forum_headers
 from .db import Post, SessionLocal, Source
 from .pipeline import ingest
 
@@ -37,7 +37,10 @@ def status():
 
 
 def _get(url, **kw):
-    return requests.get(url, headers=UA, timeout=8, **kw)
+    extra = forum_headers(url)
+    if extra:       # requests keeps custom headers across redirects: never carry the forum's secret elsewhere
+        kw.setdefault("allow_redirects", False)
+    return requests.get(url, headers={**UA, **extra}, timeout=8, **kw)
 
 
 def _download_image(url: str, name: str) -> str:
@@ -90,6 +93,9 @@ def crawl_forum(session, src: Source) -> int:
     base = src.url.rstrip("/")
     listing = _get(base + "/new")
     listing.raise_for_status()
+    if listing.is_redirect or urlparse(listing.url).hostname != urlparse(base).hostname:
+        raise RuntimeError(f"redirected to a sign-in page at {urlparse(listing.url).hostname} "
+                           "(Cloudflare Access?): set FORUM_HEADERS in .env")
     cards = _forum_cards(listing.text)
     known = {p.remote_id for p in session.query(Post.remote_id).filter(Post.source == "forum").all()}
     new = 0
@@ -270,11 +276,14 @@ def request_takedown(post: Post) -> tuple[bool, str]:
             return False, "This post is no longer on the forum (the forum was reset), so there is nothing to take down."
         if len(parts) > 3 and parts[3].startswith("c"):          # a single comment
             r = requests.post(f"{base}/api/moderation/flag-comment/{parts[3][1:]}",
-                              headers={"X-Mod-Token": MOD_TOKEN, **UA},
-                              json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6)
-            return r.ok, ("Comment hidden on the forum." if r.ok else r.text[:200])
-        r = requests.post(f"{base}/api/moderation/flag/{pid}", headers={"X-Mod-Token": MOD_TOKEN, **UA},
-                          json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6)
-        return r.ok, r.text[:200]
+                              headers={"X-Mod-Token": MOD_TOKEN, **UA, **forum_headers(base)},
+                              json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6,
+                              allow_redirects=False)
+            return r.status_code < 300, ("Comment hidden on the forum." if r.ok else r.text[:200])
+        r = requests.post(f"{base}/api/moderation/flag/{pid}",
+                          headers={"X-Mod-Token": MOD_TOKEN, **UA, **forum_headers(base)},
+                          json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6,
+                          allow_redirects=False)
+        return r.status_code < 300, r.text[:200] or f"forum answered {r.status_code}"
     except requests.RequestException as e:
         return False, str(e)

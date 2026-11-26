@@ -164,6 +164,7 @@ if [ "$LOCAL_FORUM" = 1 ]; then
      uvicorn forum_app:app --host 0.0.0.0 --port "$FPORT" --log-level warning) &
   PIDS+=($!)
   export FORUM_URL="http://localhost:$FPORT"
+  export FORUM_HEADERS=""      # the local forum needs no Cloudflare Access token
   sleep 1
 fi
 
