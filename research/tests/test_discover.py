@@ -21,7 +21,7 @@ from collect import discover_channels as dc  # noqa: E402
 from collect import telegram_public as tp  # noqa: E402
 
 NOW = datetime(2026, 11, 20, tzinfo=timezone.utc)
-SECRET_PHONE = "9829041736"
+SECRET_PHONE = "9200041736"
 SECRET_UPI = "kitwala77@ybl"
 FRAUD_POSTS = [f"Corporate current account kit available, full kit with passbook ATM net banking. SBI HDFC. "
                f"Price 25000. WhatsApp {SECRET_PHONE}",
@@ -308,23 +308,23 @@ from collect.rajasthan import places_in  # noqa: E402
     ("sriganganagar", {"sri_ganganagar"}), ("Ganganagar", {"sri_ganganagar"}),
     ("Chittaurgarh", {"chittorgarh"}), ("PIN 302001", {"rajasthan_pin"}), ("pincode 333 001", {"rajasthan_pin"}),
     ("Price 300000", set()), ("₹300000", set()), ("300000 rs", set()), ("limit 340000 daily", set()),
-    ("call 9829041736", set()), ("kotak bank", set()), ("Delhi 110001", set()),
+    ("call 9200041736", set()), ("kotak bank", set()), ("Delhi 110001", set()),
 ])
 def test_places(text, expected):
     assert places_in(text) == expected
 
 
-RAJ_POSTS = ["Jaipur current account kit available, full kit passbook net banking, WhatsApp 9829041736",
+RAJ_POSTS = ["Jaipur current account kit available, full kit passbook net banking, WhatsApp 9200041736",
              "Jodhpur payout account ready, commission per transaction, DM @kit_dealer_x",
              "जयपुर करंट अकाउंट किट उपलब्ध, खाता किराये पर, संपर्क t.me/kitwala_bhai"]
 USDT_POSTS = ["USDT seller, INR to USDT best rate, binance p2p, f2f cash, DM @usdt_dealer_y",
-              "Buy USDT TRC20, p2p trusted, tether rate today, call 9829041736",
-              "USDT to INR f2f in Jaipur, p2p binance, commission 2%, WhatsApp 9829041736"]
+              "Buy USDT TRC20, p2p trusted, tether rate today, call 9200041736",
+              "USDT to INR f2f in Jaipur, p2p binance, commission 2%, WhatsApp 9200041736"]
 INVEST_POSTS = ["Double money in 7 days! 100% profit guaranteed, investment plan daily return, DM @inv_x",
                 "Trading profit daily, VIP signal, guaranteed return, join t.me/profit_x",
-                "Forex signals, 100% profit, daily profit plan, WhatsApp 9829041736"]
+                "Forex signals, 100% profit, daily profit plan, WhatsApp 9200041736"]
 TASK_POSTS = ["Part time job, work from home, daily payment, like videos and earn, DM @task_x",
-              "Ghar baithe kamai, task job, daily income 3000, salary daily, contact 9829041736",
+              "Ghar baithe kamai, task job, daily income 3000, salary daily, contact 9200041736",
               "पार्ट टाइम जॉब, घर बैठे कमाई, रोज पेमेंट, संपर्क t.me/task_y"]
 
 
@@ -346,7 +346,7 @@ def test_geo_score_and_focus():
     (FRAUD_POSTS[:1] + RAJ_POSTS[::2], "account_sale"),
     (USDT_POSTS, "usdt_p2p"), (INVEST_POSTS, "crypto_investment_scam"), (TASK_POSTS, "task_job_scam"),
     (["Gaming payout available, payin payout, betting payout, settlement daily, commission per transaction",
-      "Payin payout service, casino gaming payout, running account, WhatsApp 9829041736",
+      "Payin payout service, casino gaming payout, running account, WhatsApp 9200041736",
       "Payout account, fund transfer, per transaction 2%, DM @payout_x"], "payout_mule"),
     (LEGIT_POSTS, "legit_finance"),
     (["Good morning everyone", "Cricket match today", "Movie review: great film"], "unrelated"),
@@ -553,7 +553,7 @@ def test_place_in_username_sets_rajasthan_focus():
 def test_pay_username_counts_for_payout():
     c = dc.Candidate(id=1, username="dukepay2026", title="Duke", kind="broadcast")
     dc.score_candidate(c, ["Deposit and withdrawal agents needed, commission per transaction, DM @duke_x",
-                           "Agent recruitment, INR deposit daily, WhatsApp 9829041736"], [NOW], cfg()["settings"])
+                           "Agent recruitment, INR deposit daily, WhatsApp 9200041736"], [NOW], cfg()["settings"])
     assert c.category == "payout_mule" and c.category_hits["payout_mule"] >= 3
 
 
@@ -575,7 +575,7 @@ def test_earlier_channels_get_name_signals_and_unclear_ones_are_reread(tmp_path)
         c.pop("category_hits", None)
     _old_state(tmp_path, old)
     client = FakeClient({}, {2: msgs(["Deposit and withdrawal agents needed, commission per transaction",
-                                      "Agent recruitment, payout daily, WhatsApp 9829041736"])},
+                                      "Agent recruitment, payout daily, WhatsApp 9200041736"])},
                         cached={"dukepay2026": 2})
     res, out = run(client, cfg(), tmp_path)
     by = {c["username"]: c for c in yaml.safe_load(out.read_text())["channels"]}
@@ -595,14 +595,14 @@ def test_earlier_channels_get_name_signals_and_unclear_ones_are_reread(tmp_path)
     ("Job Vacancy Kota Kinabalu", set()), ("GRUP INFO MITRA KOTA BOGOR", set()), ("Trading ot Kota", set()),
     ("Kota city jobs, salary 15000 rs", {"kota"}), ("कोटा में नौकरी", {"kota"}), ("kota sbi account kit", {"kota"}),
     ("USDT kota jaipur", {"kota", "jaipur"}), ("PIN 324001 Kota", {"kota", "rajasthan_pin"}),
-    ("Kota, pay by UPI", {"kota"}), ("call +91 98290 41736 Kota", {"kota"}),
+    ("Kota, pay by UPI", {"kota"}), ("call +91 92000 41736 Kota", {"kota"}),
 ])
 def test_kota_needs_indian_context(text, expected):
     assert places_in(text) == expected
 
 
 def test_foreign_markers_zero_the_geo_score():
-    posts = ["Jaipur current account kit, WhatsApp 9829041736", "Jaipur USDT f2f, also in Dubai"]
+    posts = ["Jaipur current account kit, WhatsApp 9200041736", "Jaipur USDT f2f, also in Dubai"]
     c = scored(posts, title="USDT Jaipur")
     assert c.foreign_markers == ["dubai"] and c.geo_score == 0 and not c.rajasthan_focus and c.districts == {}
     c = dc.Candidate(id=1, username="cahayatradingkotamarudu", title="Cahaya trading", kind="broadcast")

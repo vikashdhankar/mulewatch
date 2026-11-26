@@ -48,7 +48,7 @@ def test_reporting_flow():
     reportbot.handle_update(upd(101, "/start"), tg)
     assert "report suspicious financial ads" in tg.sent[-1][1]
 
-    ad = "SBI current account full kit available, ATM + passbook + net banking, KYC done. 15k. Call 98290 41736"
+    ad = "SBI current account full kit available, ATM + passbook + net banking, KYC done. 15k. Call 92000 41736"
     reportbot.handle_update(upd(101, ad), tg)
     reply = tg.sent[-1][1]
     assert "scam" in reply and "MW-" in reply and "1930" in reply

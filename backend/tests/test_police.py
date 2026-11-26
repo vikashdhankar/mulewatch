@@ -23,8 +23,8 @@ from app.pipeline import base_training_set, ingest, recompute_all  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "docs" / "samples" / "sample_ncrp_complaints.csv"
 KIT_AD = ("SBI current account kit available, ATM + passbook + net banking, KYC done. 18k per account. "
-          "Telegram t.me/kitwala_jpr or call 98290 41736. Jaipur delivery")
-RENT_AD = "Apna khata kiraye pe do, har mahine 30k. Payment UPI se: earnfast21@ybl WhatsApp 70148 25519"
+          "Telegram t.me/kitwala_jpr or call 92000 41736. Jaipur delivery")
+RENT_AD = "Apna khata kiraye pe do, har mahine 30k. Payment UPI se: earnfast21@ybl WhatsApp 92008 25519"
 
 
 def setup_module():
@@ -51,8 +51,8 @@ def new_case(text: str, **kw) -> int:
 # ----------------------------------------------------------------------------- normalisers
 
 def test_complaint_normalisers():
-    assert complaints.norm_values("phone", "98290 41736 / +91-70148-25519") == [
-        ("phone", "+919829041736"), ("phone", "+917014825519")]
+    assert complaints.norm_values("phone", "92000 41736 / +91-92008-25519") == [
+        ("phone", "+919200041736"), ("phone", "+919200825519")]
     assert complaints.norm_values("upi", "EarnFast21@YBL") == [("upi", "earnfast21@ybl")]
     assert complaints.norm_values("account", "5010-0234-5678-12") == [("account", "50100234567812")]
     assert ("handle", "kitwala_jpr") in complaints.norm_values("url", "https://t.me/kitwala_jpr")
@@ -124,10 +124,10 @@ def test_analyst_sees_masked_numbers():
     pid = new_case(KIT_AD)
     a = client("analyst").get(f"/api/posts/{pid}").json()
     o = client("io").get(f"/api/posts/{pid}").json()
-    assert "98290 41736" in o["text"] and "98290 41736" not in a["text"]
+    assert "92000 41736" in o["text"] and "92000 41736" not in a["text"]
     assert len(a["text"]) == len(o["text"])                 # highlights stay aligned
     assert all("•" in v for v in a["entities"]["phone"])
-    assert mask_text("+919829041736") == "+9198••••••36"
+    assert mask_text("+919200041736") == "+9192••••••36"
 
 
 # ----------------------------------------------------------------------------- workflow & clock
@@ -157,7 +157,7 @@ def test_status_flow_and_takedown_clock():
 
 def test_repost_after_takedown_is_detected():
     io = client("io")
-    pid = new_case("Fresh kit ready, current account + ATM, contact t.me/repost_seller_77 or 9988776655 bulk available",
+    pid = new_case("Fresh kit ready, current account + ATM, contact t.me/repost_seller_77 or 9200776655 bulk available",
                    author="seller_a", url="http://forum.test/p/50")
     for st in ("VERIFIED", "NOTICE_SENT", "CONTENT_REMOVED"):
         assert io.patch(f"/api/posts/{pid}/case", json={"status": st}).status_code == 200
@@ -238,10 +238,10 @@ def test_brief_pdf_both_languages():
 
 
 def test_recruiter_ranks_bulk_recruiter_above_single_seller():
-    single = new_case("Selling my SBI savings account, KYC done, 8k. call 9123400001", author="one_timer",
+    single = new_case("Selling my SBI savings account, KYC done, 8k. call 9200400001", author="one_timer",
                       url="http://forum.test/p/80")
     recruit = new_case("Need savings account holders! Rent your account, har mahine 25k, commission per account. "
-                       "Agents wanted, bulk. Students earn easy. WhatsApp 9123400002", author="recruiter_x",
+                       "Agents wanted, bulk. Students earn easy. WhatsApp 9200400002", author="recruiter_x",
                        url="http://forum.test/p/81")
     with SessionLocal() as s:
         recompute_all(s, alert=False)
@@ -255,12 +255,17 @@ def io_bytes(b: bytes):
 # ----------------------------------------------------------------------------- tier 2/3 additions
 
 def test_phone_circle_hint():
-    sug = jurisdiction.suggest(Post(text="Account kit milega", entities={"phone": ["+919829041736"]}))
+    # the series table itself, by prefix only (no full real number needed)
+    assert jurisdiction._SERIES["9829"] == "Rajasthan" and jurisdiction._SERIES["9810"] == "Delhi"
+    # demo numbers (+91 0<circle digit>...) are never real but still show the hint
+    sug = jurisdiction.suggest(Post(text="Account kit milega", entities={"phone": ["+910129041736"]}))
     assert "Rajasthan" in sug["circles"]
     assert "Rajasthan circle" in sug["note"]
-    other = jurisdiction.suggest(Post(text="call now", entities={"phone": ["+919810012345"]}))
-    assert "Rajasthan" not in other["circles"] and other["circles"]
+    assert any("Demo number" in s["detail"] for s in sug["signals"])
+    other = jurisdiction.suggest(Post(text="call now", entities={"phone": ["+910210012345"]}))
+    assert other["circles"] == ["Delhi"]
     assert "outside Rajasthan" in other["note"]
+    assert not jurisdiction.suggest(Post(text="call", entities={"phone": ["+919200041736"]}))["circles"]  # unlisted series
 
 
 def test_brief_by_district():
@@ -470,8 +475,8 @@ def test_backend_text_shown_in_hindi_has_a_translation():
     import json
     from app import brief
     hi = json.loads((ROOT / "frontend" / "src" / "hi.json").read_text(encoding="utf-8"))
-    posts = [Post(text="Kit ready IFSC SBIN0000691 Jaipur, call 98290 41736", entities={"phone": ["+919829041736"], "ifsc": ["SBIN0000691"]}),
-             Post(text="Kit ready, call 98290 41736", entities={"phone": ["+919829041736"]}),
+    posts = [Post(text="Kit ready IFSC SBIN0000691 Jaipur, call +91 01290 41736", entities={"phone": ["+910129041736"], "ifsc": ["SBIN0000691"]}),
+             Post(text="Kit ready, call +91 01290 41736", entities={"phone": ["+910129041736"]}),
              Post(text="Kit ready", entities={})]
     for p in posts:
         j = jurisdiction.suggest(p)

@@ -35,12 +35,12 @@ from pii.redact import Redactor  # noqa: E402
 CFG = config.merge(config.load(), {"llm": {"enabled": False}})
 RED = Redactor(b"unit-test-salt-0123456789")
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
-KIT = "SBI current account kit, passbook + ATM + net banking, 18k. Call 98290 41736, UPI kit77@ybl. Jaipur"
+KIT = "SBI current account kit, passbook + ATM + net banking, 18k. Call 92000 41736, UPI kit77@ybl. Jaipur"
 
 
 def kit(n: int) -> str:
     """The kit ad with identifiers of its own, so earlier tests don't make them 'seen before'."""
-    return KIT.replace("98290 41736", f"98290 {n:05d}").replace("kit77@ybl", f"kit{n}@ybl")
+    return KIT.replace("92000 41736", f"98290 {n:05d}").replace("kit77@ybl", f"kit{n}@ybl")
 
 
 class KeywordModel:
@@ -183,8 +183,8 @@ def test_log_filter_masks_values_that_slip_through(caplog):
     log = logging.getLogger("watcher.test")
     log.addFilter(RedactFilter())
     with caplog.at_level(logging.INFO):
-        log.info("oops %s", "call 9829041736 or kit77@ybl")
-    assert "9829041736" not in caplog.text and "kit77@ybl" not in caplog.text and "[PHONE]" in caplog.text
+        log.info("oops %s", "call 9200041736 or kit77@ybl")
+    assert "9200041736" not in caplog.text and "kit77@ybl" not in caplog.text and "[PHONE]" in caplog.text
 
 
 # ----------------------------------------------------------------------------- mocked Telethon

@@ -19,6 +19,10 @@ REF = Path(__file__).parent / "refdata"
 _D = json.loads((REF / "rajasthan_districts.json").read_text(encoding="utf-8"))["districts"]
 DISTRICTS = {d["name"]: d for d in _D}
 _SERIES = json.loads((REF / "phone_series.json").read_text(encoding="utf-8")).get("series", {})
+# demo numbers (+91 0XXXX XXXXX, see extract.DEMO_PHONE) are never real; the digit after the 0 stands for a
+# circle so the demo can still show this hint
+DEMO_CIRCLES = {"1": "Rajasthan", "2": "Delhi", "3": "Maharashtra & Goa", "4": "Bihar & Jharkhand",
+                "5": "UP (East)", "6": "West Bengal", "7": "Gujarat", "8": "Haryana", "9": "Punjab"}
 
 _ALIASES: dict[str, str] = {}
 for d in _D:
@@ -85,10 +89,12 @@ def suggest(post) -> dict:
     circles = []
     for ph in list(dict.fromkeys(ents.get("phone", []) + [w for w in ents.get("whatsapp", []) if w.startswith("+91")])):
         d = ph[-10:]
-        circle = _SERIES.get(d[:5]) or _SERIES.get(d[:4])
+        demo = d.startswith("0")
+        circle = DEMO_CIRCLES.get(d[1:2]) if demo else (_SERIES.get(d[:5]) or _SERIES.get(d[:4]))
         if circle:
             circles.append(circle)
-            msg = _say("Number series first allotted in the {circle} circle (weak: numbers can be ported)", circle=circle)
+            msg = _say("Demo number (not a real mobile) standing for the {circle} circle", circle=circle) if demo else \
+                _say("Number series first allotted in the {circle} circle (weak: numbers can be ported)", circle=circle)
             signals.append({"kind": "phone", "value": ph, "detail": _text([msg]), "detail_t": msg,
                             "district": "", "state": circle})
     circle_note = []

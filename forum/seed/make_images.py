@@ -98,7 +98,7 @@ def main():
         ("ATM + PASSBOOK + CHEQUE BOOK", 40, "fg"), ("NET BANKING + SIM", 40, "fg"),
         ("KYC DONE  ·  HIGH LIMIT", 40, "accent"), ("", 30, "fg"),
         ("Gaming / P2P / Trading OK", 38, "fg"), ("", 30, "fg"),
-        ("Telegram: t.me/kitwala_jpr", 42, "accent"), ("Call 98290 41736", 42, "fg"),
+        ("Telegram: t.me/kitwala_jpr", 42, "accent"), ("Call +91 01290 41736", 42, "fg"),
     ], bg=(12, 12, 14), fg=(245, 245, 245), accent=(255, 204, 0))
     # edited repost of the same poster (cropped + tinted) -> perceptual-hash match
     p2 = p.crop((20, 20, 880, 1080)).resize((900, 1100))
@@ -110,7 +110,7 @@ def main():
         ("Bas apna bank account", 52, "fg"), ("kiraye pe do!", 60, "fg"), ("", 30, "fg"),
         ("✓ Ghar baithe income", 40, "fg"), ("✓ Students & housewives welcome", 36, "fg"),
         ("✓ 100% safe, no risk", 40, "fg"), ("", 30, "fg"),
-        ("WhatsApp 70148 25519", 48, "accent"),
+        ("WhatsApp +91 01148 25519", 48, "accent"),
     ], bg=(0, 92, 64), fg=(255, 255, 255), accent=(255, 230, 90))
 
     poster("usdt_poster.png", [

@@ -21,8 +21,8 @@ from app.main import app  # noqa: E402
 from app.ml import retrain  # noqa: E402
 from app.pipeline import base_training_set  # noqa: E402
 
-MULE = "Apna bank khata kiraye pe do, har mahine 30k commission. ATM + passbook + SIM bhejo. WhatsApp 70148 25519"
-KIT = "SBI current account kit available, ATM + passbook + net banking, KYC done. 18k per account. call 98290 41736"
+MULE = "Apna bank khata kiraye pe do, har mahine 30k commission. ATM + passbook + SIM bhejo. WhatsApp 92008 25519"
+KIT = "SBI current account kit available, ATM + passbook + net banking, KYC done. 18k per account. call 92000 41736"
 NORMAL = "Good morning everyone, the Jaipur book fair opens on Sunday at 10 am."
 
 
@@ -81,7 +81,7 @@ def test_csv_import_scores_keeps_time_and_channel_and_dedupes():
     with SessionLocal() as s:
         kit = s.get(Post, top["id"])
         assert kit.source == "import" and kit.posted_at == datetime(2026, 10, 1, 4, 0)   # 09:30 IST
-        assert "+919829041736" in kit.entities.get("phone", []) and kit.evidence_hash
+        assert "+919200041736" in kit.entities.get("phone", []) and kit.evidence_hash
         normal = s.query(Post).filter(Post.source == "import", Post.text == NORMAL).one()
         assert normal.risk_level == "Low"
     # the same file again adds nothing

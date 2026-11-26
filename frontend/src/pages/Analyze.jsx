@@ -7,9 +7,9 @@ import { Evidence } from "./CaseDetail";
 
 const SAMPLES = [
   "HDFC current account available — full kit with ATM + passbook + net banking. KYC done, 15k. Telegram t.me/fastkit_99",
-  "Bhai apna khata kiraye pe do, har mahine 25k milega. Sirf gaming ke liye use hoga. WhatsApp 98765 43210",
+  "Bhai apna khata kiraye pe do, har mahine 25k milega. Sirf gaming ke liye use hoga. WhatsApp +91 09765 43210",
   "Beware: never sell or rent your bank account, it makes you a money mule. Report to 1930.",
-  "Selling my old cycle, ₹3000. Call 91234 56780",
+  "Selling my old cycle, ₹3000. Call +91 04234 56780",
 ];
 
 export default function Analyze() {

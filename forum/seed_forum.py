@@ -27,12 +27,12 @@ POSTS = [
      "", "kit_poster.png", 3, [("ankit_sharma", "Reported. This is literally money mule activity."), ("sonu_bhai_deals", "dm kiya bhai")]),
     ("quickdeals_jpr", "GamingAdda", 30, "Gaming payout account chahiye? DM",
      "Bhai log jinko gaming / betting ke liye withdrawal account chahiye, ready account hai.\n"
-     "HDFC / ICICI / Kotak sab milega. Call or WA 98290 41736", "", "kit_poster_repost.jpg", 2, []),
+     "HDFC / ICICI / Kotak sab milega. Call or WA +91 01290 41736", "", "kit_poster_repost.jpg", 2, []),
     ("sharma_enterprises", "PaisaTalk", 20, "Corporate account available for business use",
      "Firm current a/c available with net banking + ATM. 2 year old account, no questions asked.\n"
-     "Bulk available for agents. Contact t.me/kitwala_jpr or 9829041736", "", "", 1, []),
+     "Bulk available for agents. Contact t.me/kitwala_jpr or +91 0129041736", "", "", 1, []),
     ("sonu_bhai_deals", "GamingAdda", 15, "BGMI tournament withdrawal ke liye khata chahiye?",
-     "SBI, PNB, BOB ka khata kiraye pe milega, full kit with sim. Aadhaar linked, pre-activated.\n12k only. Call 98290 41736",
+     "SBI, PNB, BOB ka khata kiraye pe milega, full kit with sim. Aadhaar linked, pre-activated.\n12k only. Call +91 01290 41736",
      "", "", 4, []),
     ("rohit_traders", "CampusCorner", 2, "Students — earn 15k by lending your account for 1 month",
      "Need savings account holders. Rent your account for 1 month, paisa turant.\nATM + net banking chahiye. Join t.me/kitwala_jpr",
@@ -41,13 +41,13 @@ POSTS = [
     # ---------------------------------------------------------------- network B (rent-your-account recruiters)
     ("earnfromhome_21", "NaukriAlerts", 40, "Work from home — earn ₹30,000/month, no investment",
      "Students, housewives sab apply karo. Kaam simple hai — bas apna bank account kiraye pe do, hum gaming "
-     "transactions ke liye use karenge. Har mahine 30k guaranteed.\nPayment UPI se: earnfast21@ybl\nWhatsApp 70148 25519",
+     "transactions ke liye use karenge. Har mahine 30k guaranteed.\nPayment UPI se: earnfast21@ybl\nWhatsApp +91 01148 25519",
      "", "earn_poster.png", 6, [("meena_r", "Isme fas mat jana koi, account freeze ho jata hai.")]),
     ("priya_jobs", "CampusCorner", 18, "Part time income for college students 💸",
      "Rent your bank account for 3 months and earn 25k. Only need ATM card + net banking details.\n"
-     "Safe and genuine, 200+ students already earning. DM on WhatsApp", "https://wa.me/917014825519", "", 5, []),
+     "Safe and genuine, 200+ students already earning. DM on WhatsApp", "https://wa.me/910114825519", "", 5, []),
     ("naukri_guru_jpr", "NaukriAlerts", 6, "घर बैठे कमाई का मौका",
-     "अपना खाता किराये पर दो और हर महीने ₹20,000 पाओ। बस एटीएम कार्ड और पासबुक देना है।\nसंपर्क: 7014825519 — UPI earnfast21@ybl",
+     "अपना खाता किराये पर दो और हर महीने ₹20,000 पाओ। बस एटीएम कार्ड और पासबुक देना है।\nसंपर्क: +91 0114825519 — UPI earnfast21@ybl",
      "", "", 2, []),
 
     # ---------------------------------------------------------------- network C (cards / USDT)
@@ -65,9 +65,9 @@ POSTS = [
     # ---------------------------------------------------------------- network D (no-KYC + SIM combos)
     ("fastmoney_hub", "PaisaTalk", 22, "Account opening without KYC — ATM card in 2 days",
      "No KYC savings account available, get ATM card in 2 days. Limit increased accounts available.\n"
-     "Contact 8875 93 6612", "https://bit.ly/fastacc-demo", "", 1, []),
+     "Contact +91 0175 93 6612", "https://bit.ly/fastacc-demo", "", 1, []),
     ("sim_store_jpr", "JaipurBazaar", 44, "Pre-activated SIM + savings account combo",
-     "Pre-activated SIMs with linked savings account available, KYC done. Bulk available. WA 8875936612",
+     "Pre-activated SIMs with linked savings account available, KYC done. Bulk available. WA +91 0175936612",
      "", "", 0, []),
 
     # ---------------------------------------------------------------- lone actors
@@ -75,7 +75,7 @@ POSTS = [
      "fr3sh acc0unt kit r3ady, n0 kyc, ib + atm + sim. price 15k. inbox only.\npay: kitdeal77@okaxis", "", "", 0, []),
     ("kit_wala_rajesh", "JaipurBazaar", 3, "DM for details 🔥🔥", "", "", "passbook_kit.png", 1, []),
     ("deepak_kumar_88", "PaisaTalk", 1.5, "Selling my old bank account kit, not using anymore",
-     "Mera ICICI savings account hai, passbook ATM cheque book sab hai. Koi lena chahe toh 10k me de dunga.\nMessage me 9461 22 7730",
+     "Mera ICICI savings account hai, passbook ATM cheque book sab hai. Koi lena chahe toh 10k me de dunga.\nMessage me +91 0161 22 7730",
      "", "", 0, [("pooja_m", "Bhai mat karo ye, account pe case lag jayega")]),
 
     # ---------------------------------------------------------------- tricky but benign
@@ -94,7 +94,7 @@ POSTS = [
      "Opened a savings account at the campus branch and they gave me a platinum debit card. Any tips on using it safely?",
      "", "my_new_card.png", 23, [("harsh_v", "Never share the CVV or OTP with anyone, and hide the card number before posting pics!")]),
     ("harsh_v", "JaipurBazaar", 12, "Selling Dell Inspiron laptop, i5 8GB, ₹26,000",
-     "2 years old, good battery. Bill & box available. Call 9414 55 2093.", "", "laptop.png", 7, []),
+     "2 years old, good battery. Bill & box available. Call +91 0114 55 2093.", "", "laptop.png", 7, []),
     ("kunal_g", "PaisaTalk", 31, "Zero balance savings account — open via official app?",
      "Our bank now lets you open a zero balance savings account fully online through the official app with video KYC. "
      "Anyone tried it? Is the debit card free?", "", "", 6, []),
@@ -113,7 +113,7 @@ POSTS = [
     ("pravah_team", "CampusCorner", 46, "SKIT Tech Fest 2026 — 24 hour hackathon registrations open!",
      "AI, Web and Cyber Security tracks. Prizes worth ₹1,00,000. Teams of 2–4.", "https://pravah.skit.ac.in", "hackathon.png", 88, []),
     ("maa_ki_rasoi", "JaipurBazaar", 52, "Home-style tiffin service in Mansarovar — ₹2,500/month",
-     "Dal, sabzi, 4 roti, rice. Lunch & dinner. Call 9001 23 4417", "", "tiffin.png", 15, []),
+     "Dal, sabzi, 4 roti, rice. Lunch & dinner. Call +91 0101 23 4417", "", "tiffin.png", 15, []),
     ("ritu_homes", "JaipurBazaar", 41, "1 BHK furnished room for rent, Malviya Nagar",
      "₹8,000/month, Wi-Fi included, 5 min from GT. Students & working professionals welcome.", "", "room_rent.png", 12, []),
     ("cricket_jpr", "CampusCorner", 23, "Sunday cricket at Central Park — need 4 players",
@@ -121,7 +121,7 @@ POSTS = [
     ("gate_aspirant", "CampusCorner", 36, "GATE CSE 2027 study group — weekends at central library",
      "Planning to cover OS, DBMS, CN and Algo with weekly mock tests. Comment if interested.", "", "", 27,
      [("rahul_cse", "Interested!"), ("aditya_k", "Count me in for OS and CN"),
-      ("easy_paisa_jpr", "Students! Earn 2000 daily from home, no investment. WhatsApp 98870 01122")]),
+      ("easy_paisa_jpr", "Students! Earn 2000 daily from home, no investment. WhatsApp +91 01870 01122")]),
     ("foodie_jaipur", "JaipurBazaar", 14, "Best momos near WTP?", "Tried 3 stalls, all average. Recommendations?", "", "", 21,
      [("harsh_v", "Try the one opposite gate 2, fried paneer momos are 🔥")]),
     ("bgmi_squad", "GamingAdda", 19, "Looking for 2 players for BGMI scrims (Ace+)",
@@ -129,7 +129,7 @@ POSTS = [
     ("valorant_club", "GamingAdda", 48, "Inter-college Valorant tournament on 25 Oct",
      "Free entry, 16 teams, LAN at the college auditorium.", "", "", 34, []),
     ("bike_seller_raj", "JaipurBazaar", 27, "Selling Honda Activa 2019, single owner, ₹42,000",
-     "18,000 km, insurance valid till 2027. WhatsApp 9887 61 2235", "", "", 4, []),
+     "18,000 km, insurance valid till 2027. WhatsApp +91 0187 61 2235", "", "", 4, []),
     ("rpsc_prep", "NaukriAlerts", 33, "RPSC Programmer exam date announced?",
      "Anyone saw the official notice? Coaching says December.", "", "", 10, []),
     ("startup_hr", "NaukriAlerts", 13, "Internship: React developer at a Jaipur startup (₹12k stipend)",
@@ -144,7 +144,7 @@ POSTS = [
     ("sip_guru", "PaisaTalk", 39, "SIP vs FD for a college student with ₹2,000/month?",
      "Want to start investing small. Index fund SIP or recurring deposit?", "", "", 20,
      [("kunal_g", "Index fund SIP, long term. Keep 3 months expense in FD/RD as emergency."),
-      ("quick_earn_99", "Want 25k/month without investing? Rent your savings account, sirf gaming ke liye. WhatsApp 70148 25519")]),
+      ("quick_earn_99", "Want 25k/month without investing? Rent your savings account, sirf gaming ke liye. WhatsApp +91 01148 25519")]),
     ("os_notes", "CampusCorner", 17, "Operating Systems Unit 3 notes (deadlocks & banker's algorithm)",
      "Handwritten notes, scanned. Hope it helps for the mid-sem.", "https://drive.google.com/example-os-notes", "", 41, []),
     ("bookworm_skit", "JaipurBazaar", 21, "Second-hand engineering books, 3rd sem CSE, half price",

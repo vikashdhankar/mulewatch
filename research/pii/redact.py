@@ -17,7 +17,7 @@ Not masked: IFSC codes (they name a bank branch, not a person), prices, the paym
 
 Each entity gets hash = HMAC-SHA256(RESEARCH_HASH_SALT, "<TYPE>:<normalised value>")[:16]. The salt is a
 secret kept out of any released data; without it the hashes cannot be reversed by trying all phone numbers.
-Normalising first means "+91 98290-41736", "098290 41736" and "wa.me/919829041736" get the same hash.
+Normalising first means "+91 92000-41736", "092000 41736" and "wa.me/919200041736" get the same hash.
 """
 import argparse
 import hashlib

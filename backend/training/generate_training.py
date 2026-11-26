@@ -2,7 +2,7 @@
 
 The corpus is template-generated (English, Hinglish, Hindi) and is deliberately DIFFERENT from the
 Charcha forum demo posts, so what the command center catches on the forum is unseen data.
-All phone numbers / UPI IDs / handles are synthetic.
+All phone numbers are demo numbers (+91 0..., never assignable); UPI IDs / handles are synthetic.
 
     python training/generate_training.py   ->  training/training_data.jsonl
 """
@@ -26,7 +26,9 @@ PRICE = ["₹8000", "₹12,000", "15k", "₹25000 per account", "20k only", "Rs 
 
 
 def phone():
-    return random.choice(["+91 7", "+91 8", "9", "+91-9", "6"]) + "".join(random.choice("0123456789") for _ in range(9))
+    """A demo number: +91 0XXXXXXXXX. No Indian number starts with 0, so it can never be someone's real mobile."""
+    d = "0" + "".join(random.choice("0123456789") for _ in range(9))
+    return random.choice(["+91 {}{}{}{}{} {}{}{}{}{}", "+91-{}{}{}{}{}{}{}{}{}{}", "+91{}{}{}{}{}{}{}{}{}{}", "+91 {}{}{}{} {}{} {}{}{}{}"]).format(*d)
 
 
 def upi():

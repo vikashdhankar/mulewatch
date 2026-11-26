@@ -206,7 +206,7 @@ HI = {
     # ---- watchlist
     "Known numbers, UPI IDs and links. Any post that mentions one is raised to at least score 88 and alerts immediately, even if the wording looks harmless.":
         "ज्ञात नंबर, यूपीआई आईडी और लिंक। इनमें से किसी का उल्लेख करने वाली पोस्ट का स्कोर कम से कम 88 होता है और तुरंत अलर्ट आता है, भले ही भाषा सामान्य लगे।",
-    "Type": "प्रकार", "e.g. +919829041736 or earnfast21@ybl": "जैसे +919829041736 या earnfast21@ybl", "Value": "मान",
+    "Type": "प्रकार", "e.g. +910129041736 or earnfast21@ybl": "जैसे +910129041736 या earnfast21@ybl", "Value": "मान",
     "Note (optional)": "टिप्पणी (वैकल्पिक)", "Note": "टिप्पणी", "Add": "जोड़ें", "Added": "जोड़ा गया", "Remove": "हटाएँ",
     "Watchlist is empty": "निगरानी सूची खाली है", "Add identifiers here, or use the + next to any identifier in a case.": "यहाँ पहचान विवरण जोड़ें, या किसी प्रकरण में विवरण के पास + का उपयोग करें।",
 

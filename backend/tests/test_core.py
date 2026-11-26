@@ -18,12 +18,12 @@ retrain(base_training_set())
 
 
 def test_entities():
-    e = extract_entities("Call 98290 41736 or +91-8875 93 6612, pay kit77@ybl, t.me/kitwala_jpr, wa.me/917014825519 "
+    e = extract_entities("Call 92000 41736 or +91-9200 93 6612, pay kit77@ybl, t.me/kitwala_jpr, wa.me/919200825519 "
                          "IFSC SBIN0001234, USDT TQ7Xk2YpZ6bM1rJ9aV8fW3eN4cL5hG2sD1, mail a@b.com")
-    assert "+919829041736" in e["phone"] and "+918875936612" in e["phone"]
+    assert "+919200041736" in e["phone"] and "+919200936612" in e["phone"]
     assert e["upi"] == ["kit77@ybl"]
     assert e["telegram"] == ["t.me/kitwala_jpr"]
-    assert "+917014825519" in e["whatsapp"]
+    assert "+919200825519" in e["whatsapp"]
     assert e["ifsc"] == ["SBIN0001234"]
     assert e["crypto_wallet"] and e["email"] == ["a@b.com"]
 
@@ -36,14 +36,14 @@ def test_obfuscation_and_hindi():
 
 SUSPICIOUS = [
     "SBI current account available, full kit with ATM passbook net banking, KYC done 15k. t.me/fastkit_99",
-    "Bhai apna khata kiraye pe do, har mahine 25k. Sirf gaming ke liye. WhatsApp 98765 43210",
+    "Bhai apna khata kiraye pe do, har mahine 25k. Sirf gaming ke liye. WhatsApp 92005 43210",
     "Debit cards with PIN available, bulk, replacement guarantee. Pay kit@okaxis",
-    "बैंक खाता उपलब्ध है, पूरा किट मिलेगा। संपर्क 9876543210",
+    "बैंक खाता उपलब्ध है, पूरा किट मिलेगा। संपर्क 9200543210",
 ]
 BENIGN = [
     "Never sell or rent your bank account — it makes you a money mule. Report to 1930.",
     "Lost my ATM card, how do I block it quickly?",
-    "Selling my old cycle for 3000, call 9123456780",
+    "Selling my old cycle for 3000, call 9200456780",
     "Which bank is best for a current account for my small shop?",
     "Opened my first savings account today and got a debit card!",
 ]
@@ -64,7 +64,7 @@ def test_card_photo_without_sale_language_is_low():
 
 def test_rings():
     P = lambda i, text: SimpleNamespace(id=i, text=text, ocr_text="", image_phash="", entities=extract_entities(text))
-    posts = [P(1, "kit available call 98290 41736"), P(2, "ready account, WA 9829041736"),
+    posts = [P(1, "kit available call 92000 41736"), P(2, "ready account, WA 9200041736"),
              P(3, "unrelated post about momos"), P(4, "join t.me/abc_kit"), P(5, "full kit t.me/abc_kit")]
     c = compute(posts)
     assert c[1]["cluster"] == c[2]["cluster"] and c[4]["cluster"] == c[5]["cluster"]
@@ -76,14 +76,14 @@ def test_fetcher_page_parsing_and_ssrf_guard(monkeypatch):
 
     from app.fetcher import FetchError, _check_host, _from_page, _Page, platform_for
     html = """<html><head><title>Ad</title><meta property="og:title" content="Current account full kit">
-    <meta property="og:description" content="ATM + passbook, KYC done. Call 98290 41736">
+    <meta property="og:description" content="ATM + passbook, KYC done. Call 92000 41736">
     <meta property="og:image" content="/poster.png"><script>var x=1</script></head>
     <body><nav>Menu</nav><article><p>Telegram t.me/kitwala_jpr</p></article><footer>c</footer></body></html>"""
     page = _Page()
     page.feed(html)
     info = _from_page(page, "https://example.com/ad/1")
     assert info["title"] == "Current account full kit"
-    assert "98290 41736" in info["text"] and "t.me/kitwala_jpr" in info["text"]
+    assert "92000 41736" in info["text"] and "t.me/kitwala_jpr" in info["text"]
     assert "var x" not in info["text"] and "Menu" not in info["text"]
     assert info["images"][0] == "/poster.png"
 
@@ -104,9 +104,9 @@ def test_fetcher_page_parsing_and_ssrf_guard(monkeypatch):
 
 def test_comment_style_texts():
     assert analyze("Contact 767824655 to earn money")["base_score"] >= 55        # malformed number still counts
-    assert analyze("Students! Earn 2000 daily from home, no investment. WhatsApp 98870 01122")["base_score"] >= 55
+    assert analyze("Students! Earn 2000 daily from home, no investment. WhatsApp 92000 01122")["base_score"] >= 55
     for ok in ("Thanks, very helpful post!", "dm kiya bhai", "Interested!",
-               "Part-time food delivery partners needed, weekly payout. Call 9876501234"):
+               "Part-time food delivery partners needed, weekly payout. Call 9200501234"):
         assert analyze(ok)["base_score"] < 30, ok
 
 

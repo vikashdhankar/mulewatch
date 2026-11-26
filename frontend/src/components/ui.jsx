@@ -138,6 +138,8 @@ export function Entities({ entities = {}, onWatch, watched = new Set() }) {
           <dd>{vals.map((v) => (
             <span key={v} className="ent">
               <code>{v}</code>
+              {(k === "phone" || k === "whatsapp") && String(v).replace(/\s/g, "").startsWith("+910") &&
+                <span className="small muted" title={t("Numbers starting +91 0 cannot belong to anyone; the demo data uses them")}> {t("demo number")}</span>}
               {onWatch && WATCHABLE.has(k) && !String(v).includes("•") && (
                 watched.has(String(v).toLowerCase())
                   ? <span className="ent-watched" title={t("On watchlist")}><Icon name="eye" size={14} /></span>

@@ -92,8 +92,8 @@ python -m pii.redact store/raw/telegram.jsonl --out store/redacted/posts.jsonl [
 
 Identifiers become placeholders (`[PHONE]`, `[UPI]`, `[ACCOUNT]`, `[CARD]`, `[ID]`, `[EMAIL]`, `[URL]`,
 `[HANDLE]`), and `entities` keeps a keyed hash for each one: HMAC-SHA256 with the secret salt over the
-normalised value. Because values are normalised first, `+91 98290 41736`, `098290-41736`, `९८२९०४१७३६`
-and `wa.me/919829041736` get the same hash, and so do `@seller` and `t.me/seller`. Not masked: IFSC codes
+normalised value. Because values are normalised first, `+91 92000 41736`, `092000-41736`, `९२०००४१७३६`
+and `wa.me/919200041736` get the same hash, and so do `@seller` and `t.me/seller`. Not masked: IFSC codes
 (a branch, not a person), prices, the payment app of a UPI ID (`meta.psp`, e.g. `ybl`), and link/e-mail
 domains. After masking, the CLI runs the detectors again on the output and warns if anything still looks
 like an identifier. Every post also gets a language tag (`en`, `hi`, `hinglish`, `mixed`).

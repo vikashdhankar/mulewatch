@@ -48,10 +48,10 @@ def setup_module():
     init_db()
     auth.ensure_demo_users()
     p = Processor(CFG, Redactor(b"api-test-salt-0123456789"), KeywordModel(), sender=lambda t: None)
-    OUT["kota"] = p.handle(rec("api_a", 1, "Current account kit 20k Kota, call 94140 77001", 300))
-    OUT["usdt"] = p.handle(rec("api_b", 1, "USDT P2P buy sell, call 94140 77001, Jaipur", 200))
+    OUT["kota"] = p.handle(rec("api_a", 1, "Current account kit 20k Kota, call 92000 77001", 300))
+    OUT["usdt"] = p.handle(rec("api_b", 1, "USDT P2P buy sell, call 92000 77001, Jaipur", 200))
     OUT["med"] = p.handle(rec("api_b", 2, "Gaming payout partner needed", 100))
-    OUT["same"] = p.handle(rec("api_c", 1, "Account kit ready, call 94140 77001, pay same5@ybl", 50))
+    OUT["same"] = p.handle(rec("api_c", 1, "Account kit ready, call 92000 77001, pay same5@ybl", 50))
     for i in range(4):          # a burst on api_c
         p.handle(rec("api_c", 10 + i, "hello", 10 - i))
 

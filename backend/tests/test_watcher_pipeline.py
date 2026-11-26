@@ -59,14 +59,14 @@ def cls(category="account_sale", p=0.9, **kw):
 # ----------------------------------------------------------------------------- redact
 
 def test_redact_masks_identifiers_and_keeps_keyed_hashes():
-    r = redact({"channel": "kitwala", "text": "Kit ready, call 98290 41736 or pay kit77@ybl, DM @seller_jpr or @kitwala",
+    r = redact({"channel": "kitwala", "text": "Kit ready, call 92000 41736 or pay kit77@ybl, DM @seller_jpr or @kitwala",
                 "ocr_text": "UPI kit77@ybl card XXXX XXXX XXXX 1234"}, RED)
     assert "98290" not in r.text and "kit77@ybl" not in r.text + r.ocr_text
     assert "[PHONE]" in r.text and "[UPI]" in r.text and "[UPI]" in r.ocr_text
     kinds = sorted(k.split(":")[0] for k in r.keys)
     # one UPI (same value in text and OCR), the seller's handle; not the channel's own handle, not a masked card
     assert kinds == ["HANDLE", "PHONE", "UPI"]
-    assert r.keys == redact({"channel": "x", "text": "+91-9829041736 kit77@YBL t.me/seller_jpr"}, RED).keys
+    assert r.keys == redact({"channel": "x", "text": "+91-9200041736 kit77@YBL t.me/seller_jpr"}, RED).keys
     assert "[IMAGE TEXT]" in r.model_text
 
 
@@ -182,11 +182,11 @@ def test_signals_use_post_time_not_clock():
 # ----------------------------------------------------------------------------- alert text
 
 def test_alert_message_is_masked_and_complete():
-    r = redact({"channel": "kits", "text": "<b>Kit</b> 18k call 9829041736 pay kit77@ybl Jaipur"}, RED)
+    r = redact({"channel": "kits", "text": "<b>Kit</b> 18k call 9200041736 pay kit77@ybl Jaipur"}, RED)
     msg = format_alert(AlertView(masked_text=r.text, category="account_sale", score=82.4, channel="kits",
                                  link="https://t.me/kits/12", district="Jaipur", linked=2,
                                  case_url="http://x/case/5", cues=["kit"]))
-    assert "9829041736" not in msg and "kit77@ybl" not in msg and "[PHONE]" in msg
+    assert "9200041736" not in msg and "kit77@ybl" not in msg and "[PHONE]" in msg
     for part in ("score 82", "Account Sale", "@kits", "District: Jaipur", "Linked identifiers: 2",
                  "https://t.me/kits/12", "http://x/case/5", "&lt;b&gt;Kit"):
         assert part in msg
