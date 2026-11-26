@@ -86,3 +86,52 @@ def test_record_fields():
     assert r["channel"] == "somechan" and r["media_type"] == "photo"
     assert r["views"] == 120 and r["ocr_text"] == "ocr words"
     assert r["date"].startswith("2026-01-02T03:04")
+
+
+class HistoryClient:
+    """iter_messages like Telethon: newest first, or oldest first with reverse=True; min_id excludes older."""
+
+    def __init__(self, ids):
+        from telethon.tl.types import Channel
+        self.ch = Channel.__new__(Channel)
+        self.ch.username, self.ch.broadcast, self.ch.megagroup = "pubchan", True, False
+        self.ids, self.calls = ids, []
+
+    async def get_entity(self, name):
+        return self.ch
+
+    async def iter_messages(self, entity, limit=None, min_id=0, reverse=False, wait_time=None, offset_date=None):
+        self.calls.append({"limit": limit, "min_id": min_id, "reverse": reverse})
+        ids = [i for i in sorted(self.ids, reverse=not reverse) if i > min_id][:limit]
+        for i in ids:
+            yield SimpleNamespace(id=i, date=datetime(2026, 11, 1, tzinfo=timezone.utc), message=f"post {i}",
+                                  photo=None, media=None, document=None, views=1, forwards=0, edit_date=None,
+                                  action=None)
+
+
+def _collect(client, last_id, out, max_posts):
+    settings = {"max_posts_per_channel": max_posts, "requests_per_minute": 600, "ocr_images": False,
+                "ocr_lang": "hin+eng", "max_image_bytes": 1}
+    lim = tp.RateLimiter(6000)
+    return asyncio.run(tp.collect_channel(client, {"username": "pubchan"}, settings, lim, last_id, out))
+
+
+def test_first_pass_takes_the_newest_posts_then_continues(tmp_path):
+    import json
+    out = tmp_path / "raw.jsonl"
+    client = HistoryClient(range(1, 21))
+    last = _collect(client, 0, out, 5)
+    ids = [json.loads(x)["message_id"] for x in out.read_text().splitlines()]
+    assert ids == [16, 17, 18, 19, 20] and last == 20                 # newest five, written oldest first
+    client.ids = range(1, 24)
+    last = _collect(client, last, out, 5)
+    ids = [json.loads(x)["message_id"] for x in out.read_text().splitlines()]
+    assert ids[5:] == [21, 22, 23] and last == 23 and client.calls[-1]["reverse"]
+
+
+def test_approved_only(tmp_path):
+    p = tmp_path / "c.yaml"
+    p.write_text("channels:\n- hand_picked_one\n- {username: appr_one, approved: true, label: likely_fraud}\n"
+                 "- {username: not_appr, approved: false, label: likely_fraud}\n")
+    assert [c["username"] for c in tp.load_config(p)["channels"]] == ["hand_picked_one", "appr_one"]
+    assert [c["username"] for c in tp.load_config(p, approved_only=True)["channels"]] == ["appr_one"]

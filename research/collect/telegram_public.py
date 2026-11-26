@@ -1,10 +1,12 @@
 """Read posts from public Telegram channels listed in config/channels.yaml.
 
     python -m collect.telegram_public --config config/channels.yaml --out store/raw/telegram.jsonl
-    python -m collect.telegram_public --config config/channels.discovered.yaml   # approved entries only
+    python -m collect.telegram_public --config config/channels.discovered.yaml --approved-only \
+        --out store/raw/telegram.jsonl --max-posts 500     # approved entries only, newest 500 per channel
 
 What it does and does not do:
   * reads message history of public broadcast channels that have an @username, without joining them;
+    a channel's first run takes its newest max_posts posts, later runs only what is newer;
   * refuses invite links, private channels, groups and supergroups;
   * never sends, forwards, reacts, joins, adds contacts or opens bot chats: those requests are
     blocked inside the client (ReadOnlyTelegramClient), not just left unused;
@@ -24,6 +26,7 @@ import logging
 import os
 import re
 import time
+from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -66,7 +69,9 @@ def is_approved(item: dict) -> bool:
     return item.get("approved") is True and item.get("label") in COLLECTABLE_LABELS
 
 
-def load_config(path) -> dict:
+def load_config(path, approved_only: bool = False) -> dict:
+    """approved_only: only entries a person marked approved: true (hand-written entries without the key are
+    left out too)."""
     cfg = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     settings = {"max_posts_per_channel": 5000, "requests_per_minute": 20, "pause_between_channels_s": 10,
                 "ocr_images": True, "ocr_lang": "hin+eng", "max_image_bytes": 5_000_000}
@@ -76,7 +81,7 @@ def load_config(path) -> dict:
     channels, seen = [], set()
     for item in cfg.get("channels") or []:
         item = {"username": item} if isinstance(item, str) else dict(item)
-        if not is_approved(item):
+        if not is_approved(item) or (approved_only and item.get("approved") is not True):
             continue
         name = normalize_username(item.get("username", ""))
         if name.lower() in seen:
@@ -266,17 +271,26 @@ async def collect_channel(client, ch: dict, settings: dict, limiter: RateLimiter
         log.warning("skip %s: not a public broadcast channel", name)
         return last_id
 
-    kwargs = {"reverse": True, "limit": settings["max_posts_per_channel"],
-              # Telethon fetches history in pages of 100; wait_time spaces those page requests
-              "wait_time": 60.0 / settings["requests_per_minute"]}
+    # Telethon fetches history in pages of 100; wait_time spaces those page requests
+    kwargs = {"limit": settings["max_posts_per_channel"], "wait_time": 60.0 / settings["requests_per_minute"]}
+    first_pass = not last_id and not ch.get("since")
     if last_id:
         kwargs["min_id"] = last_id
     elif ch.get("since"):
         kwargs["offset_date"] = datetime.combine(ch["since"], datetime.min.time(), tzinfo=timezone.utc)
 
+    async def messages():
+        if first_pass:          # the newest max_posts posts, written oldest first; later runs continue from there
+            page = [m async for m in client.iter_messages(entity, **kwargs)]
+            for m in reversed(page):
+                yield m
+        else:                   # forward from the cursor (or the since date)
+            async for m in client.iter_messages(entity, reverse=True, **kwargs):
+                yield m
+
     n, newest, batch = 0, last_id, []
     try:
-        async for msg in client.iter_messages(entity, **kwargs):
+        async for msg in messages():
             if getattr(msg, "action", None):          # service messages (pinned, title changed ...)
                 continue
             ocr = ""
@@ -305,11 +319,18 @@ async def collect_channel(client, ch: dict, settings: dict, limiter: RateLimiter
     return newest
 
 
-async def run(config_path: str, out_path: str, state_path: str) -> None:
+async def run(config_path: str, out_path: str, state_path: str, approved_only: bool = False,
+              max_posts: int | None = None) -> None:
     load_env()
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, approved_only=approved_only)
     if not cfg["channels"]:
-        raise SystemExit(f"no channels in {config_path}")
+        raise SystemExit(f"no {'approved ' if approved_only else ''}channels in {config_path}")
+    if max_posts:
+        cfg["settings"]["max_posts_per_channel"] = max_posts
+    log.info("%d channels (%s), at most %d posts each per run, %s requests/min", len(cfg["channels"]),
+             ", ".join(f"{k} {v}" for k, v in sorted(Counter(c.get("label") or "hand-picked"
+                                                               for c in cfg["channels"]).items())),
+             cfg["settings"]["max_posts_per_channel"], cfg["settings"]["requests_per_minute"])
     api_id, api_hash = os.environ.get("TELEGRAM_API_ID"), os.environ.get("TELEGRAM_API_HASH")
     if not api_id or not api_hash:
         raise SystemExit("set TELEGRAM_API_ID and TELEGRAM_API_HASH in research/.env")
@@ -336,10 +357,18 @@ def main(argv=None):
     ap.add_argument("--out", default="store/raw/telegram.jsonl")
     ap.add_argument("--state", default="store/raw/telegram_state.json",
                     help="last message id per channel, so reruns only fetch new posts")
+    ap.add_argument("--approved-only", action="store_true",
+                    help="only entries marked approved: true (e.g. by collect.apply_review)")
+    ap.add_argument("--max-posts", type=int, default=None,
+                    help="posts per channel per run (default: settings.max_posts_per_channel). On a channel's "
+                         "first run these are its newest posts")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
+    if args.max_posts is not None and args.max_posts <= 0:
+        raise SystemExit("--max-posts must be positive")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(message)s")
-    asyncio.run(run(args.config, args.out, args.state))
+    logging.getLogger("telethon").setLevel(logging.WARNING)
+    asyncio.run(run(args.config, args.out, args.state, args.approved_only, args.max_posts))
 
 
 if __name__ == "__main__":
