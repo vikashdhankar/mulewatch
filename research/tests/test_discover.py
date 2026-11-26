@@ -265,6 +265,9 @@ def test_repo_configs_load():
     kws = [k for _, k in c["fraud"]]
     assert len(kws) == len(set(kws)) and "sri ganganagar usdt" in kws and "जयपुर खाता" in kws
     assert kws.index("rbl account") < kws.index("usdt seller") < kws.index("jaipur usdt")
+    seeds, official = dc.load_legit_seeds(root / "config/legit_seeds.yaml")
+    assert 25 <= len(seeds) <= 40 and len({u.lower() for u, _ in seeds}) == len(seeds)
+    assert {"government", "payments", "regulator", "bank"} == set(official) and all(g for _, g in seeds)
 
 
 # ----------------------------------------------------------------------------- collector approval gate
