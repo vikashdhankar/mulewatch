@@ -3,6 +3,7 @@ telethon>=1.36
 pytesseract>=0.3.10
 pillow>=10.0
 pyyaml>=6.0
+openpyxl>=3.1          # channel review spreadsheet (collect.apply_review)
 python-dotenv>=1.0
 requests>=2.31
 pandas>=2.0
