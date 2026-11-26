@@ -47,8 +47,47 @@ _AMOUNT_BEFORE = re.compile(r"(₹|\$|rs\.?|inr|usdt|price|rate|amount|limit|bal
 _AMOUNT_AFTER = re.compile(r"^\s*(/-|rs\b|₹|k\b|inr|usdt|\+|lakh|lac|rupees|रुपये)", re.I)
 
 
-def places_in(text: str) -> set[str]:
-    """Districts / places mentioned in the text; 'rajasthan_pin' for a Rajasthan PIN code."""
+# Indian bank names, also used by the discovery cues
+INDIAN_BANKS = ["sbi", "hdfc", "icici", "axis", "kotak", "rbl", "pnb", "bob", "bank of baroda", "baroda", "canara",
+                "union bank", "idfc", "indusind", "yes bank", "au bank", "au small finance", "federal bank", "bandhan",
+                "idbi", "indian bank", "central bank", "uco", "paytm", "airtel payments", "fino", "jio payments",
+                "equitas", "ujjivan", "dbs", "esaf", "एसबीआई", "एचडीएफसी", "आईसीआईसीआई", "एक्सिस", "कोटक", "पीएनबी",
+                "बड़ौदा", "केनरा"]
+
+# "Kota" is also the Malay / Indonesian word for city (Kota Kinabalu, Kota Bogor). It counts as the Rajasthan
+# district only in a text with Indian context: rupees, UPI, Hindi text, Rajasthan (or another of its places),
+# +91 or an Indian bank.
+NEEDS_INDIA_CONTEXT = {"kota"}
+_INDIA = re.compile(r"₹|(?<![a-z])(inr|rs\.?|rupees?|upi|rajasthan|india|indian)(?![a-z])|\+91|[ऀ-ॿ]|"
+                    r"(?<![a-z0-9])(" + "|".join(re.escape(b) for b in INDIAN_BANKS if b.isascii()) + r")(?![a-z0-9])",
+                    re.I)
+
+# Places abroad that discovery keeps finding through "kota" (and USDT desks abroad). A channel naming any of
+# them gets no Rajasthan geo score at all.
+FOREIGN_MARKERS = ["kinabalu", "marudu", "suara", "kita", "cahaya", "malaysia", "indonesia", "turkey", "antalya",
+                   "dubai"]
+_FOREIGN = [(m, re.compile(r"(?<![a-z])" + m + r"(?![a-z])", re.I)) for m in FOREIGN_MARKERS]
+_FOREIGN_FLAT = [(m, re.compile(m, re.I)) for m in FOREIGN_MARKERS if len(m) >= 6]   # inside "jobvacancykotakinabalu"
+
+
+def india_context(text: str) -> bool:
+    return bool(text) and bool(_INDIA.search(text))
+
+
+def foreign_markers(text: str, run_together: bool = False) -> set[str]:
+    """Foreign place markers in a text (whole words). run_together: also inside a username like
+    'cahayatradingkotamarudu' (markers of 6+ letters only, so 'kita' doesn't fire inside 'kitab')."""
+    if not text:
+        return set()
+    found = {m for m, rx in _FOREIGN if rx.search(text)}
+    if run_together:
+        found |= {m for m, rx in _FOREIGN_FLAT if rx.search(text)}
+    return found
+
+
+def places_in(text: str, need_context: bool = True) -> set[str]:
+    """Districts / places mentioned in the text; 'rajasthan_pin' for a Rajasthan PIN code. Kota only with
+    Indian context in the same text, unless need_context is False (the caller checks context itself)."""
     if not text:
         return set()
     found = {d for d, rx in _PLACE_RX if rx.search(text)}
@@ -57,6 +96,8 @@ def places_in(text: str) -> set[str]:
         if not _AMOUNT_BEFORE.search(before) and not _AMOUNT_AFTER.search(after):
             found.add("rajasthan_pin")
             break
+    if need_context and found & NEEDS_INDIA_CONTEXT and not (found - NEEDS_INDIA_CONTEXT or india_context(text)):
+        found -= NEEDS_INDIA_CONTEXT                 # another Rajasthan place or PIN is Indian context too
     return found
 
 

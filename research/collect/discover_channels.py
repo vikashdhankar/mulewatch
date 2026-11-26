@@ -2,6 +2,9 @@
 
     python -m collect.discover_channels --out config/channels.discovered.yaml -v
     python -m collect.discover_channels --dry-run          # show the plan; no Telegram requests
+    python -m collect.discover_channels --reapply          # current rules on saved scores; no Telegram
+    python -m collect.discover_channels --rescore          # read again channels scored under older rules
+    python -m collect.discover_channels --legit-seeds config/legit_seeds.yaml   # screen known-legit channels
 
 Pace: 6 requests/min and at most 300 requests per calendar day by default. Progress is saved after every
 channel (config/channels.discovered.state.json, git-ignored), so running the same command again the next
@@ -29,9 +32,14 @@ they are labelled likely_legit unless their score says otherwise, in which case 
 Also per candidate:
   geo_score        share of sampled posts (with text) naming a Rajasthan district or place (English,
                    Hindi and common spellings) or a Rajasthan PIN code (30xxxx-34xxxx, amounts excluded);
-                   rajasthan_focus = geo_score >= scoring.rajasthan_focus (0.2); top_district
+                   rajasthan_focus = geo_score >= scoring.rajasthan_focus (0.2); top_district.
+                   "Kota" counts only with Indian context (₹, INR, UPI, Hindi text, Rajasthan or another of its
+                   places, +91, an Indian bank); a foreign marker (Kota Kinabalu, Dubai ...) in the name or any
+                   sampled post zeroes the geo score (india_share, foreign_markers)
   category         payout_mule, account_sale, usdt_p2p, crypto_investment_scam, task_job_scam,
-                   legit_finance or unrelated, from cue words; 'unclear' when no category clearly leads
+                   legit_finance or unrelated, from cue words; 'unclear' when no category clearly leads.
+                   Rule phrases settle it ("accounts for sale", "KYC account", "kit available" -> account_sale;
+                   "call boy job", "playboy job", "gigolo" -> task_job_scam)
   awareness_share  share of posts with awareness wording (cyber-police / bank warning channels)
 
 Seeds come from config/discovery_seeds.yaml and, if present, store/discovery_seeds.yaml (git-ignored;
@@ -44,7 +52,8 @@ keep running. Legit keywords run until --legit-target candidates are categorised
 Channel titles are written with identifiers masked. Post text and contact values are never printed,
 logged or written.
 
-Output: the YAML file (same format as channels.yaml, every entry approved: false, sorted by score),
+Output: the YAML file (same format as channels.yaml, new entries approved: false, sorted by score; a
+person's decisions, approved / label / review as written by collect.apply_review, are kept on rewrite),
 a CSV next to it for review, and a per-keyword CSV. The collector only reads entries a person has
 set to approved: true whose label is likely_fraud or likely_legit.
 """
@@ -63,7 +72,7 @@ from pathlib import Path
 
 import yaml
 
-from collect.rajasthan import places_in, username_places
+from collect.rajasthan import INDIAN_BANKS, foreign_markers, india_context, places_in, username_places
 from collect.telegram_public import (RateLimiter, load_config as load_channels_config, make_client,
                                      normalize_username, telegram_lock)
 from common.io import load_env
@@ -74,11 +83,7 @@ log = logging.getLogger("collect.discover")
 
 # --------------------------------------------------------------------------- cues
 
-BANKS = ["sbi", "hdfc", "icici", "axis", "kotak", "rbl", "pnb", "bob", "bank of baroda", "baroda", "canara",
-         "union bank", "idfc", "indusind", "yes bank", "au bank", "au small finance", "federal bank", "bandhan",
-         "idbi", "indian bank", "central bank", "uco", "paytm", "airtel payments", "fino", "jio payments",
-         "equitas", "ujjivan", "dbs", "esaf", "एसबीआई", "एचडीएफसी", "आईसीआईसीआई", "एक्सिस", "कोटक", "पीएनबी",
-         "बड़ौदा", "केनरा"]
+BANKS = INDIAN_BANKS
 
 CUES: dict[str, list[str]] = {
     # selling / renting accounts and kits, payout rails
@@ -163,6 +168,15 @@ CATEGORY_TERMS: dict[str, list[str]] = {
 }
 FRAUD_CATEGORIES = ["payout_mule", "account_sale", "usdt_p2p", "crypto_investment_scam", "task_job_scam"]
 _CAT_RX = [(cat, t, _rx(t)) for cat, terms in CATEGORY_TERMS.items() for t in terms]
+
+# Phrases that settle the category on their own, in the title, the username or any sampled post. Counted as
+# "rule:<category>" in category_hits.
+CATEGORY_RULES: dict[str, list[str]] = {
+    "account_sale": ["sell any account", "accounts for sale", "account for sale", "bank account sell",
+                     "bank accounts sell", "kyc account", "kyc accounts", "kit available"],
+    "task_job_scam": ["call boy job", "callboy job", "playboy job", "play boy job", "gigolo"],
+}
+_RULE_RX = [(cat, _rx(t)) for cat, terms in CATEGORY_RULES.items() for t in terms]
 _AWARE_RX = [_rx(t) for t in CUES["awareness"]]
 
 
@@ -172,13 +186,18 @@ def category_hits(text: str) -> Counter:
         return Counter()
     hits = {(cat, t) for cat, t, rx in _CAT_RX if rx.search(text)}
     terms = {t for _, t in hits}
-    return Counter(cat for cat, t in hits if not any(t != o and t in o for o in terms))
+    out = Counter(cat for cat, t in hits if not any(t != o and t in o for o in terms))
+    out.update({f"rule:{cat}" for cat, rx in _RULE_RX if rx.search(text)})
+    return out
 
 
 def decide_category(hits: Counter, label: str, verified: bool, posts: int) -> str:
     """Rule-based category from cue counts summed over the sampled posts and the title."""
     if posts == 0:
         return "unclear"
+    rules = sorted(((hits.get(f"rule:{c}", 0), c) for c in CATEGORY_RULES), reverse=True)
+    if rules[0][0] and not verified:                 # a rule phrase settles it ("accounts for sale")
+        return rules[0][1]
     fraud = sorted(((hits[c], c) for c in FRAUD_CATEGORIES), reverse=True)
     (top_n, top), (second_n, _) = fraud[0], fraud[1]
     fraud_total = sum(n for n, _ in fraud)
@@ -223,14 +242,48 @@ def name_category_hits(username: str, title: str) -> Counter:
     return hits
 
 
+def _india_evidence(c: "Candidate") -> bool:
+    """Indian context for a place named only in the username: in the title, in the sampled posts, or (for a
+    channel scored before india_share was kept) some Hindi in its posts."""
+    if india_context(c.title):
+        return True
+    if c.india_share is not None:
+        return c.india_share > 0
+    mix = c.lang_mix or {}
+    return mix.get("devanagari", 0) > 0.02 or mix.get("roman_hindi", 0) > 0.02
+
+
 def apply_name_signals(c: "Candidate", s: dict) -> None:
     """Rajasthan places named in the username or title: they count for rajasthan_focus and the district
-    even when recent posts don't name the place. Needs no Telegram request, so it also updates channels
-    scored before this rule existed."""
-    names = username_places(c.username) | places_in(c.title)
-    c.name_places = sorted(names)
+    even when recent posts don't name the place. A foreign place marker (Kota Kinabalu, Dubai ...) in the
+    name or the posts zeroes the geo score. Category rule phrases in the name settle the category. Needs no
+    Telegram request, so it also updates channels scored before these rules existed."""
+    rules = Counter({k: v for k, v in name_category_hits(c.username, c.title).items() if k.startswith("rule:")})
+    if rules:
+        if c.category_hits is not None:
+            merged = Counter(c.category_hits)
+            for k, v in rules.items():
+                merged[k] = max(merged[k], v)
+            c.category_hits = dict(merged)
+            c.category = decide_category(merged, c.label, c.verified, c.posts_sampled)
+        else:
+            c.category = decide_category(rules, c.label, c.verified, c.posts_sampled)
+
+    foreign = (set(c.foreign_markers or []) | foreign_markers(c.title) | foreign_markers(username_words(c.username))
+               | foreign_markers(c.username, run_together=True))
+    if foreign:
+        c.foreign_markers = sorted(foreign)
+        c.geo_score, c.districts, c.name_places, c.rajasthan_focus, c.top_district = 0.0, {}, [], False, ""
+        return
+
+    names = username_places(c.username) | places_in(c.title, need_context=False)
     districts = Counter(c.districts or {})
-    for d in username_places(c.username):
+    if "kota" in names and not (names - {"kota"}) and not _india_evidence(c):
+        names.discard("kota")                        # "Kota" alone in the name, no sign of India
+        if c.india_share is None:                    # scored before the rule: its count may come from the name
+            districts.pop("kota", None)
+    c.name_places = sorted(names)
+    for d in username_places(c.username) & names:
         districts[d] = max(districts[d], 1)
     c.districts = dict(districts.most_common(3))
     c.rajasthan_focus = c.geo_score >= s.get("rajasthan_focus", 0.2) or bool(names)
@@ -308,6 +361,8 @@ class Candidate:
     name_places: list = field(default_factory=list)
     category_also: str = ""
     category_hits: dict | None = None     # aggregate cue counts per category (None: scored before v2)
+    india_share: float | None = None      # share of posts with Indian context (None: scored before v3)
+    foreign_markers: list = field(default_factory=list)
 
 
 def public_username(entity) -> str | None:
@@ -337,6 +392,9 @@ def label_for(c: Candidate, s: dict) -> str:
     if c.verified and c.score < s["likely_fraud"]:
         return "likely_legit"
     if c.role == "legit":
+        # a bank / regulator name is easy to imitate: an "official" seed must carry Telegram's verified mark
+        if c.seed_group in s.get("official_groups", ()) and not c.verified:
+            return "unclear"
         return "likely_legit" if c.score < s["likely_fraud"] else "unclear"
     if c.score >= s["likely_fraud"]:
         return "likely_fraud"
@@ -360,6 +418,8 @@ def score_candidate(c: Candidate, texts: list[str], dates: list[datetime], s: di
     c.lang_mix = lang_mix(with_text)
     c.label = label_for(c, s)
 
+    c.india_share = round(sum(india_context(t) for t in with_text) / len(with_text), 3) if with_text else 0.0
+    c.foreign_markers = sorted(set().union(*(foreign_markers(t) for t in with_text))) if with_text else []
     places = [places_in(t) for t in with_text]
     district_counts = Counter(d for ps in places for d in ps)
     district_counts.update(places_in(c.title))
@@ -378,6 +438,10 @@ def score_candidate(c: Candidate, texts: list[str], dates: list[datetime], s: di
 
 
 # --------------------------------------------------------------------------- telegram calls
+
+class _Done(Exception):
+    """End of a mode that does not search."""
+
 
 class StopForToday(Exception):
     """Stop cleanly, save state, and continue on the next run (budget used up or Telegram asked to wait)."""
@@ -472,7 +536,8 @@ class Discoverer:
                 pass
         return await self._call(self.client.get_input_entity, username)
 
-    async def seeds(self, seeds: list[tuple[str, str]]) -> tuple[list[Candidate], list[str]]:
+    async def seeds(self, seeds: list[tuple[str, str]], role: str = "seed",
+                    found_by: str = "seed list") -> tuple[list[Candidate], list[str]]:
         """Resolve seeds (cache first) and fetch them in one batched request. Returns (new candidates,
         usernames that could not be used)."""
         inputs, failed = [], []
@@ -505,7 +570,7 @@ class Discoverer:
             if entity is None:
                 failed.append(u)
                 continue
-            c = self._add(entity, "seed list" + (f" (group: {g})" if g else ""), "seed")
+            c = self._add(entity, found_by + (f" (group: {g})" if g else ""), role)
             if c is not None:
                 c.seed_group = g
                 out.append(c)
@@ -631,7 +696,8 @@ def _entry(c: Candidate, today: str) -> dict:
             "category": c.category, "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
             "category_also": c.category_also or None, "name_places": c.name_places,
             "top_district": c.top_district or None, "districts": c.districts,
-            "awareness_share": c.awareness_share,
+            "awareness_share": c.awareness_share, "india_share": c.india_share,
+            "foreign_markers": c.foreign_markers or None,
             "subscribers": c.subscribers, "last_post": c.last_post or None, "lang_mix": c.lang_mix,
             "kind": c.kind, "verified": c.verified, "tg_scam_flag": c.tg_scam_flag,
             "contact_share": c.contact_share, "posts_sampled": c.posts_sampled,
@@ -639,16 +705,38 @@ def _entry(c: Candidate, today: str) -> dict:
             **({"seed_group": c.seed_group} if c.seed_group else {}), **({"error": c.error} if c.error else {})}
 
 
+REVIEW_KEYS = ("approved", "label", "review")
+
+
+def reviewed_entries(out: Path) -> dict:
+    """Entries of an existing output that a person has decided on (approved: true, or a 'review' record
+    written by collect.apply_review), by lower-case username. Rewriting the file keeps those decisions."""
+    if not out.exists():
+        return {}
+    doc = yaml.safe_load(out.read_text(encoding="utf-8")) or {}
+    return {str(e.get("username", "")).lower(): e for e in doc.get("channels") or []
+            if isinstance(e, dict) and (e.get("approved") is True or e.get("review"))}
+
+
 def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], settings: dict,
                   collector_settings: dict) -> None:
     today = date.today().isoformat()
     cands = sorted(cands, key=lambda c: (-c.score, c.username.lower()))
+    kept = reviewed_entries(out)
+    entries = []
+    for c in cands:
+        e = _entry(c, today)
+        prev = kept.pop(c.username.lower(), None)
+        if prev:                                     # a person's decision outlives a re-score
+            e.update({k: prev[k] for k in REVIEW_KEYS if k in prev})
+        entries.append(e)
+    entries += list(kept.values())                   # reviewed entries added by hand
     doc = {"generated": today,
            "note": "Candidates for human review. Set approved: true only after checking a channel by hand. "
                    "The collector reads only approved likely_fraud / likely_legit broadcast channels.",
            "scoring": {k: settings[k] for k in ("posts_per_channel", "contact_weight", "title_weight",
                                                 "likely_fraud", "likely_legit", "rajasthan_focus")},
-           "channels": [_entry(c, today) for c in cands],
+           "channels": entries,
            "settings": collector_settings}
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
@@ -660,15 +748,18 @@ def write_outputs(out: Path, cands: list[Candidate], keyword_rows: list[dict], s
     with open(out.with_suffix(".csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
+        decided = {e["username"].lower(): e for e in entries}
         for c in cands:
             mix = c.lang_mix or {}
+            e = decided.get(c.username.lower(), {})
             w.writerow({"username": c.username, "title": c.title, "subscribers": c.subscribers,
                         "last_post": c.last_post, "score": c.score, "category": c.category,
                         "rajasthan_focus": c.rajasthan_focus, "geo_score": c.geo_score,
                         "lang_mix": f"dev={mix.get('devanagari', 0)};rom={mix.get('roman_hindi', 0)};"
                                     f"en={mix.get('english', 0)}",
-                        "found_by": "; ".join(c.found_by), "label": c.label, "kind": c.kind,
-                        "category_also": c.category_also, "top_district": c.top_district, "approved": False})
+                        "found_by": "; ".join(c.found_by), "label": e.get("label", c.label), "kind": c.kind,
+                        "category_also": c.category_also, "top_district": c.top_district,
+                        "approved": e.get("approved", False)})
     with open(out.with_name(out.stem + ".keywords.csv"), "w", newline="", encoding="utf-8") as f:
         cols = ["role", "group", "keyword", "results", "new_public", "likely_fraud", "unclear", "likely_legit",
                 "rajasthan_focus", "legit_finance", "capped"]
@@ -686,7 +777,11 @@ def _kw_key(role: str, kw: str) -> str:
 async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_target: int = 20,
                    rpm: float = 6, collector_settings: dict | None = None, sleep=asyncio.sleep,
                    target_rajasthan: int = 25, state_path: Path | None = None, daily_budget: int = 300,
-                   max_new_per_keyword: int = 15, max_flood_wait: int = 60, today: str | None = None) -> dict:
+                   max_new_per_keyword: int = 15, max_flood_wait: int = 60, today: str | None = None,
+                   mode: str = "discover", legit_seeds: list | None = None) -> dict:
+    """mode: discover (seeds, then keywords), rescore (read again channels scored before the current rules,
+    no searching), legit_seeds (screen the given (username, group) seeds as negatives, no searching), or
+    reapply (no Telegram at all: apply the name rules to the saved scores and rewrite the outputs)."""
     s = cfg["settings"]
     state_path = Path(state_path or out.with_name(out.stem + ".state.json"))
     state = load_state(state_path)
@@ -717,7 +812,57 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
     stopped, skipped, reason = False, 0, ""
     fraud_done = lambda: d.count("likely_fraud") >= target_fraud  # noqa: E731
     raj_done = lambda: d.count("likely_fraud", rajasthan=True) >= target_rajasthan  # noqa: E731
+    def from_cache(c) -> bool:
+        try:
+            c._entity = client.session.get_input_entity(c.username)
+            return True
+        except Exception:
+            return False
+
     try:
+        if mode == "reapply":
+            raise _Done
+        if mode == "rescore":
+            # channels scored before india_share was kept: read them again so the geo and category rules
+            # apply to their posts. Likely geo mistakes first, then Rajasthan ones, then likely fraud.
+            def priority(c):
+                named = username_places(c.username) | places_in(c.title, need_context=False)
+                suspect = "kota" in named or "kota" in (c.districts or {}) or bool(c.foreign_markers)
+                return (not suspect, not c.rajasthan_focus, c.label != "likely_fraud", -c.score)
+            todo = sorted((c for c in d.by_id.values() if c.india_share is None and not c.error), key=priority)
+            log.info("re-reading %d channels scored before the current rules", len(todo))
+            for c in todo:
+                if budget.remaining < 2:
+                    raise StopForToday(f"daily budget used ({budget.used}/{daily_budget})")
+                if not from_cache(c):
+                    log.warning("%s: not in the session cache; left as it was", c.username)
+                    continue
+                await d.inspect(c)
+                checkpoint()
+            raise _Done
+        if mode == "legit_seeds":
+            done = {u.lower() for u in state.setdefault("legit_seeds_done", []) +
+                    state.setdefault("legit_seeds_failed", [])}
+            pending = [(u, g) for u, g in legit_seeds or [] if u.lower() not in done]
+            known = {c.username.lower(): c for c in d.by_id.values()}
+            for u, g in [x for x in pending if x[0].lower() in known]:     # already scored by discovery
+                c = known[u.lower()]
+                if "legit seed list" not in " ".join(c.found_by):
+                    c.found_by.append(f"legit seed list (group: {g})")
+            pending = [x for x in pending if x[0].lower() not in known]
+            # resolving a username is the most limited request: one budget unit per seed plus one history read
+            batch = pending[:max(0, (budget.remaining - 1) // 2)]
+            new, failed = await d.seeds(batch, role="legit", found_by="legit seed list") if batch else ([], [])
+            for c in new:
+                await d.inspect(c)
+                checkpoint()
+            state["legit_seeds_done"] += [u for u, _ in batch if u not in failed]
+            state["legit_seeds_failed"] += failed
+            row("legit", "legit seeds", "(legit seed list)", len(batch), new)
+            if len(batch) < len(pending):
+                raise StopForToday(f"daily budget: {len(pending) - len(batch)} legit seeds left for the next run")
+            raise _Done
+
         # channels scored before category counts were stored and still 'unclear': read them once more so
         # the current category rules apply (input peer from the session cache, so no username lookup)
         redo = [c for c in d.by_id.values() if c.category_hits is None and c.category == "unclear" and not c.error]
@@ -777,6 +922,8 @@ async def discover(client, cfg: dict, out: Path, target_fraud: int = 100, legit_
             if stopped and role == "fraud":
                 log.info("targets reached: %d likely_fraud (%d Rajasthan-focused)", d.count("likely_fraud"),
                          d.count("likely_fraud", rajasthan=True))
+    except _Done:
+        pass
     except StopForToday as e:
         reason = str(e)
         log.warning("stopping for today: %s. Run the same command again later to continue.", reason)
@@ -875,14 +1022,35 @@ async def _connect(session: str, api_id: int, api_hash: str):
     return client
 
 
+def load_legit_seeds(path) -> tuple[list[tuple[str, str]], list[str]]:
+    """(seeds as (username, group), official groups) from config/legit_seeds.yaml."""
+    doc = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return load_seeds(path), list(doc.get("official_groups") or [])
+
+
 async def run(args) -> None:
     cfg = load_discovery_config(args.keywords, args.seeds, args.extra_seeds)
+    mode, legit = "discover", None
+    if args.reapply:
+        mode = "reapply"
+    elif args.rescore:
+        mode = "rescore"
+    elif args.legit_seeds:
+        mode = "legit_seeds"
+        legit, cfg["settings"]["official_groups"] = load_legit_seeds(args.legit_seeds)
     collector_settings = load_channels_config(args.channels_config)["settings"] \
         if Path(args.channels_config).exists() else {}
     out = Path(args.out)
     state_path = Path(args.state or out.with_name(out.stem + ".state.json"))
     if args.fresh and state_path.exists() and not args.dry_run:
         state_path.unlink()
+    kw = dict(target_rajasthan=args.target_rajasthan, state_path=state_path, daily_budget=args.daily_budget,
+              max_new_per_keyword=args.max_new_per_keyword, max_flood_wait=args.max_flood_wait, mode=mode,
+              legit_seeds=legit)
+    if mode == "reapply":                            # no Telegram
+        print_report(await discover(None, cfg, out, args.target_fraud, args.legit_target, args.rpm,
+                                    collector_settings, **kw), out)
+        return
     if args.dry_run:
         dry_run(cfg, args.target_fraud, args.legit_target, args.rpm, target_rajasthan=args.target_rajasthan,
                 daily_budget=args.daily_budget, max_new=args.max_new_per_keyword,
@@ -902,9 +1070,7 @@ async def run(args) -> None:
                 print(f"logged in (user id {me.id}); session saved to {session}")
                 return
             result = await discover(client, cfg, out, args.target_fraud, args.legit_target, args.rpm,
-                                    collector_settings, target_rajasthan=args.target_rajasthan, state_path=state_path,
-                                    daily_budget=args.daily_budget, max_new_per_keyword=args.max_new_per_keyword,
-                                    max_flood_wait=args.max_flood_wait)
+                                    collector_settings, **kw)
         finally:
             await client.disconnect()
     print_report(result, out)
@@ -929,6 +1095,12 @@ def main(argv=None):
     ap.add_argument("--fresh", action="store_true", help="ignore saved progress and start over")
     ap.add_argument("--dry-run", action="store_true", help="print the plan without contacting Telegram")
     ap.add_argument("--login", action="store_true", help="log the research account in (interactive) and exit")
+    m = ap.add_mutually_exclusive_group()
+    m.add_argument("--rescore", action="store_true",
+                   help="read again the channels scored before the current geo/category rules (no searching)")
+    m.add_argument("--legit-seeds", metavar="FILE", help="screen these seeds as negatives, e.g. config/legit_seeds.yaml")
+    m.add_argument("--reapply", action="store_true",
+                   help="no Telegram: apply the name rules to the saved scores and rewrite the outputs")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     if not 0 < args.rpm <= 20:

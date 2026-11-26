@@ -583,3 +583,119 @@ def test_earlier_channels_get_name_signals_and_unclear_ones_are_reread(tmp_path)
     assert client.calls.count("get_messages") == 1 and "resolve_username" not in client.calls
     res2, _ = run(client, cfg(), tmp_path)                          # nothing is re-read a second time
     assert client.calls.count("get_messages") == 1
+
+
+# ----------------------------------------------------------------------------- geo context, foreign markers,
+#                                                                                category rules, review, modes
+
+@pytest.mark.parametrize("text,expected", [
+    ("Job Vacancy Kota Kinabalu", set()), ("GRUP INFO MITRA KOTA BOGOR", set()), ("Trading ot Kota", set()),
+    ("Kota city jobs, salary 15000 rs", {"kota"}), ("कोटा में नौकरी", {"kota"}), ("kota sbi account kit", {"kota"}),
+    ("USDT kota jaipur", {"kota", "jaipur"}), ("PIN 324001 Kota", {"kota", "rajasthan_pin"}),
+    ("Kota, pay by UPI", {"kota"}), ("call +91 98290 41736 Kota", {"kota"}),
+])
+def test_kota_needs_indian_context(text, expected):
+    assert places_in(text) == expected
+
+
+def test_foreign_markers_zero_the_geo_score():
+    posts = ["Jaipur current account kit, WhatsApp 9829041736", "Jaipur USDT f2f, also in Dubai"]
+    c = scored(posts, title="USDT Jaipur")
+    assert c.foreign_markers == ["dubai"] and c.geo_score == 0 and not c.rajasthan_focus and c.districts == {}
+    c = dc.Candidate(id=1, username="cahayatradingkotamarudu", title="Cahaya trading", kind="broadcast")
+    dc.score_candidate(c, ["Trading signals today"], [NOW], cfg()["settings"])
+    assert set(c.foreign_markers) == {"cahaya", "marudu"} and not c.rajasthan_focus
+    c = scored(["Jaipur kit available, kitab bhi"], title="Jaipur kits")     # 'kita' is not inside 'kitab'
+    assert c.foreign_markers == [] and c.rajasthan_focus
+
+
+def test_kota_in_the_name_needs_a_sign_of_india():
+    c = dc.Candidate(id=1, username="job_kota", title="Daily jobs", kind="broadcast")
+    dc.score_candidate(c, ["New openings today", "Apply now"], [NOW], cfg()["settings"])
+    assert c.name_places == [] and not c.rajasthan_focus and c.india_share == 0
+    c = dc.Candidate(id=2, username="job_kota", title="Daily jobs", kind="broadcast")
+    dc.score_candidate(c, ["नई भर्ती आज", "Apply now"], [NOW], cfg()["settings"])
+    assert c.name_places == ["kota"] and c.rajasthan_focus and c.india_share == 0.5
+
+
+@pytest.mark.parametrize("title,posts,category", [
+    ("Sell any account here", ["Good morning"], "account_sale"),
+    ("Verified accounts", ["KYC account ready, DM", "USDT p2p binance rate", "USDT trc20 buy sell"], "account_sale"),
+    ("Kits", ["Kit available, DM for price"], "account_sale"),
+    ("PLAY BOY JOB CHENNAI", ["Earn daily"], "task_job_scam"),
+    ("Jobs", ["Call boy job, high salary", "Gigolo work"], "task_job_scam"),
+])
+def test_category_rule_phrases(title, posts, category):
+    assert scored(posts, title=title).category == category
+
+
+def test_category_rules_and_name_signals_apply_without_telegram(tmp_path):
+    base = dict(kind="broadcast", found_by=["keyword 'x'"], role="fraud", posts_sampled=20, label="unclear",
+                score=4.0, inspected=True, category="unrelated", category_hits={"unrelated": 1})
+    _old_state(tmp_path, [dict(base, id=1, username="male_play_boy", title="Play boy job Mumbai"),
+                          dict(base, id=2, username="jobvacancykotakinabalu", title="Job Vacancy Kota Kinabalu",
+                               districts={"kota": 2}, rajasthan_focus=True, top_district="kota", geo_score=0.3)])
+    res, out = run(None, cfg(), tmp_path, mode="reapply")
+    by = {c["username"]: c for c in yaml.safe_load(out.read_text())["channels"]}
+    assert by["male_play_boy"]["category"] == "task_job_scam"
+    k = by["jobvacancykotakinabalu"]
+    assert not k["rajasthan_focus"] and k["geo_score"] == 0 and k["foreign_markers"] == ["kinabalu"]
+    assert res["requests"] == 0
+
+
+def test_rewriting_keeps_review_decisions(tmp_path):
+    client = scenario()
+    _, out = run(client, cfg(["current account kit"]), tmp_path)
+    doc = yaml.safe_load(out.read_text())
+    for e in doc["channels"]:
+        if e["username"] == "payout_hub":
+            e.update(approved=True, label="likely_fraud", review={"source": "x.xlsx", "suggestion": "approve_fraud"})
+    doc["channels"].append({"username": "hand_added", "approved": True, "label": "likely_legit",
+                            "review": {"source": "x.xlsx"}})
+    out.write_text(yaml.safe_dump(doc))
+    run(client, cfg(["current account kit", "payout account"]), tmp_path)          # rewrites the file
+    by = {c["username"]: c for c in yaml.safe_load(out.read_text())["channels"]}
+    assert by["payout_hub"]["approved"] is True and by["payout_hub"]["review"]["suggestion"] == "approve_fraud"
+    assert by["hand_added"]["approved"] is True and by["kit_seller_one"]["approved"] is False
+    rows = {r["username"]: r for r in csv.DictReader(out.with_suffix(".csv").open())}
+    assert rows["payout_hub"]["approved"] == "True"
+
+
+def test_legit_seeds_are_screened_as_negatives(tmp_path):
+    bank = chan(11, "official_bank", "Bank official", verified=True)
+    fake_bank = chan(12, "bank_helpdesk", "Bank helpdesk")
+    news = chan(13, "market_news_in", "Market news")
+    kits = chan(14, "kits_for_all", "Kits")
+    client = FakeClient({}, {11: msgs(LEGIT_POSTS), 12: msgs(LEGIT_POSTS), 13: msgs(LEGIT_POSTS),
+                             14: msgs(FRAUD_POSTS)},
+                        entities={e.username: e for e in (bank, fake_bank, news, kits)})
+    c = cfg()
+    c["settings"]["official_groups"] = ["bank"]
+    seeds = [("official_bank", "bank"), ("bank_helpdesk", "bank"), ("market_news_in", "market_news"),
+             ("kits_for_all", "market_news"), ("no_such_channel", "news")]
+    res, out = run(client, c, tmp_path, mode="legit_seeds", legit_seeds=seeds)
+    by = {e["username"]: e for e in yaml.safe_load(out.read_text())["channels"]}
+    assert by["official_bank"]["label"] == "likely_legit" and by["official_bank"]["category"] == "legit_finance"
+    assert by["bank_helpdesk"]["label"] == "unclear"          # 'official' group, but not Telegram-verified
+    assert by["market_news_in"]["label"] == "likely_legit"
+    assert by["kits_for_all"]["label"] == "unclear"           # the scorer says otherwise
+    assert by["market_news_in"]["found_by"] == ["legit seed list (group: market_news)"]
+    assert all(e["approved"] is False for e in by.values())
+    assert "SearchRequest" not in client.calls
+    run(client, c, tmp_path, mode="legit_seeds", legit_seeds=seeds)                 # nothing screened twice
+    assert client.calls.count("get_messages") == 4
+
+
+def test_rescore_rereads_old_channels_suspects_first(tmp_path):
+    base = dict(kind="broadcast", found_by=["keyword 'x'"], role="fraud", posts_sampled=20, label="likely_fraud",
+                score=9.0, inspected=True, category="unclear", category_hits={})
+    _old_state(tmp_path, [dict(base, id=1, username="plain_one", title="Plain"),
+                          dict(base, id=2, username="kota_kits", title="Kits", districts={"kota": 1})])
+    client = FakeClient({}, {1: msgs(FRAUD_POSTS), 2: msgs(["Kota Kinabalu kits"])},
+                        cached={"plain_one": 1, "kota_kits": 2})
+    res, out = run(client, cfg(), tmp_path, mode="rescore", daily_budget=2)
+    by = {e["username"]: e for e in yaml.safe_load(out.read_text())["channels"]}
+    assert by["kota_kits"]["india_share"] == 0 and by["kota_kits"]["foreign_markers"] == ["kinabalu"]
+    assert by["plain_one"]["india_share"] is None and res["paused"]                 # budget: suspect first
+    run(client, cfg(), tmp_path, mode="rescore", today="2026-11-26")
+    assert yaml.safe_load(out.read_text())["channels"][0]["india_share"] is not None
