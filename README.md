@@ -45,8 +45,8 @@ Demo sign-in: `analyst`, `io`, `sho` with password `mule@2026` (created on first
 | Expected outcome | How MuleWatch does it |
 |---|---|
 | Collect publicly available ad data | Live crawler polls monitored sources every 3 s and reads **every new post and every new comment** (sellers often hide ads in comments; each comment is scored as its own case and can be taken down on its own). Forum crawler reads the schema.org `DiscussionForumPosting` JSON-LD real sites publish; Telegram crawler reads public channel previews (`t.me/s/<channel>`). **Any single link** can be checked (post, ad, Telegram post, web page or image) or added as a monitored page that's re-checked every minute. Plus manual check page and a Chrome extension. |
-| Identify keywords, images, phone numbers, URLs, payment details | Multilingual lexicon (English, Hindi, Hinglish) with obfuscation handling (`acc0unt`, `a.t.m`, `r3ady`); extraction of Indian phone numbers in any grouping, UPI IDs, Telegram/WhatsApp links, IFSC, card numbers (masked), crypto wallets, short links, prices; **OCR** (Tesseract, eng+hin) on images. |
-| Classify ads by risk indicators | Hybrid score = noisy-OR of rule engine, character n-gram text classifier, image cues (and optional Claude second opinion) → Low / Medium / High / Critical, with categories: Mule Account Sale, Account-Holder Recruitment, Card Sale, KYC Fraud. |
+| Identify keywords, images, phone numbers, URLs, payment details | Multilingual lexicon (English, Hindi, Hinglish) with obfuscation handling (`acc0unt`, `a.t.m`, `r3ady`); extraction of Indian phone numbers in any grouping, UPI IDs, Telegram/WhatsApp links, IFSC, card numbers (masked), crypto wallets, short links, prices; **OCR** (Tesseract, eng+hin) on images. Drug, arms and fake-document slang and emoji codes (🍁 ❄ 💊 🔫) count only next to sale or delivery language, so news of a seizure, a de-addiction drive or a toy shop stays low. |
+| Classify ads by risk indicators | Hybrid score = noisy-OR of rule engine, character n-gram text classifier, image cues (and optional Claude second opinion) → Low / Medium / High / Critical, with categories: Mule Account Sale, Account-Holder Recruitment, Card Sale, KYC Fraud, and for other illegal trade Drug Sale, Arms Sale, Fake Documents. |
 | Detect repeated / coordinated ads | MinHash-LSH near-duplicate text, perceptual-hash reposted images (catches cropped/tinted copies), and shared identifiers → connected "seller rings" with a ring boost. Interactive network graph. |
 | Provide evidence / context | Every flagged post shows highlighted words, extracted identifiers, OCR text, a per-component score breakdown, linked posts and *why* they're linked. SHA-256 evidence hash at capture time. One-click PDF evidence report. |
 | Alerts + investigation dashboard | Server-Sent Events push alerts to the command center instantly (toast + sound), optional Telegram bot push, case management with verdicts, watchlist, and **request takedown** that marks the post on the forum as under Cyber Cell review. |
@@ -54,12 +54,12 @@ Demo sign-in: `analyst`, `io`, `sho` with password `mule@2026` (created on first
 Extras that matter to investigators: **feedback loop** (Confirm / False positive updates per-keyword precision and retrains the model live), **watchlist** (known numbers/UPI IDs force an alert), **awareness detection** (posts that *warn* about mule accounts are not flagged), and a card photo posted by a student is not treated like a card being sold.
 
 ### Results on unseen data
-The text model is trained on a separate generated corpus (`backend/training/training_data.jsonl`, 660 examples). On the 50 forum posts and 17 comments it has never seen (19 mule, card or easy-money items, 48 normal or tricky look-alikes):
+The text model is trained on a separate generated corpus (`backend/training/training_data.jsonl`, 1,020 examples). On the 62 forum posts and 21 comments it has never seen (27 mule, card, easy-money, drug, arms or fake-document items; 56 normal or tricky look-alikes such as police news, a de-addiction drive, Holi toy guns and a pharmacy):
 
 ```
-TP 19  FP 0  TN 48  FN 0   precision 1.00  recall 1.00     (python training/evaluate.py)
+TP 27  FP 0  TN 56  FN 0   precision 1.00  recall 1.00     (python training/evaluate.py)
 ```
-It's a small synthetic set, so treat this as a sanity check rather than a benchmark.
+It's a small synthetic set written by the same team as the training templates, so treat this as a sanity check rather than a benchmark.
 
 **On real third-party data** (`backend/evaluate_external.py`). No public dataset of real mule-recruitment ads exists, so
 we test the neighbouring problem. [ScamShield-IN](https://huggingface.co/datasets/haxrits/ScamShield-IN) has 578 labelled
@@ -175,7 +175,8 @@ sudo bash /opt/charcha-src/deploy/setup-forum-server.sh   # prints the moderatio
 This publishes the forum on port 8100; open that port in the server's firewall, or put it behind your web server.
 
 * Logins: `demo / demo123`, `judge1`, `judge2`, `judge3` / `demo123`
-* Reset the forum to the 50 original posts: `sudo RESEED=1 bash /opt/charcha-src/deploy/setup-forum-server.sh`
+* Reset the forum to the 62 seed posts: `sudo RESEED=1 bash /opt/charcha-src/deploy/setup-forum-server.sh`
+* Add seed posts that aren't on a running forum yet, keeping everything else: `python seed_forum.py --add-missing`
 
 ---
 
@@ -257,3 +258,5 @@ The extension submits posts with a shared key instead of a sign-in: set `MW_INGE
 
 ## Responsible use
 MuleWatch is decision support for investigators. Scores and links are leads, not proof; every case needs human verification before action. Only publicly available content is collected. It doesn't identify people beyond what they publicly posted, contact sellers or act on its own: notices and bank letters are drafts for an authorised officer to check and sign, and the legal references in them are a starting point, not legal advice.
+
+**Synthetic data only.** Every user, post, handle and UPI ID in the demo forum, sample files and training data is made up. Phone numbers in them are written `+91 0XXXX XXXXX`: no Indian number starts with 0, so none can belong to a real person (MuleWatch reads them as phone numbers only with the explicit `+91`, and the dashboard marks them "demo number"). Tests that need a real-format mobile use the 9200 series, which is absent from the allotment table.

@@ -1,4 +1,4 @@
-"""Evaluate the detector on the 50 Charcha forum posts (never used for training).
+"""Evaluate the detector on the 62 Charcha forum posts and their comments (never used for training).
 
     cd backend && python training/evaluate.py
 """
@@ -21,7 +21,10 @@ from seed_forum import IMG, POSTS  # noqa: E402
 # ground truth: the posts in the first two blocks of seed_forum.POSTS are mule / card-sale ads
 SUSPICIOUS_AUTHORS = {"rohit_traders", "quickdeals_jpr", "sharma_enterprises", "sonu_bhai_deals", "earnfromhome_21",
                       "priya_jobs", "naukri_guru_jpr", "cardzone_official", "cc_dealer_x", "vikram_p2p",
-                      "fastmoney_hub", "sim_store_jpr", "anon_seller77", "kit_wala_rajesh", "deepak_kumar_88"}
+                      "fastmoney_hub", "sim_store_jpr", "anon_seller77", "kit_wala_rajesh", "deepak_kumar_88",
+                      # drugs, arms, fake documents
+                      "party_supply_jpr", "green_leaf_jdh", "ganganagar_supply", "desi_hathiyar_sk", "hathiyar_wala_x",
+                      "doc_seva_fast", "aadhaar_pan_center"}
 
 
 def main(threshold=55):
@@ -39,7 +42,7 @@ def main(threshold=55):
     for score, truth, title in sorted(rows, reverse=True):
         print(f"{score:6.1f}  {'MULE ' if truth else 'clean'}  {title}")
     # comments: three seeded seller comments hidden under ordinary posts, the rest are normal replies
-    scam_commenters = {"quick_earn_99", "kitwala_support", "easy_paisa_jpr"}
+    scam_commenters = {"quick_earn_99", "kitwala_support", "easy_paisa_jpr", "maal_wala_99"}
     ctp = cfp = ctn = cfn = 0
     for *_, comments in POSTS:
         for who, text in comments:
