@@ -283,7 +283,7 @@ def apply_name_signals(c: "Candidate", s: dict) -> None:
         if c.india_share is None:                    # scored before the rule: its count may come from the name
             districts.pop("kota", None)
     c.name_places = sorted(names)
-    for d in username_places(c.username) & names:
+    for d in names:                                  # a place in the name counts at least once
         districts[d] = max(districts[d], 1)
     c.districts = dict(districts.most_common(3))
     c.rajasthan_focus = c.geo_score >= s.get("rajasthan_focus", 0.2) or bool(names)
