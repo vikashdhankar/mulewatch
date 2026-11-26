@@ -411,6 +411,56 @@ def bulk_cancel(jid: int, u=Depends(current_user)):
     return {"skipped": bulk.cancel(jid, u)}
 
 
+# ----------------------------------------------------------------------------- dataset import (posts)
+
+@router.post("/import/upload")
+async def import_upload(request: Request, file: UploadFile = File(...), u=Depends(current_user)):
+    from . import post_import
+    data = await file.read()
+    try:
+        out = post_import.parse_upload(file.filename, data, u)
+    except post_import.ImportError_ as e:
+        raise HTTPException(400, str(e))
+    audit.log(u, "import.uploaded", None, {"file": file.filename, "rows": out["rows"], "format": out["format"]},
+              ip_of(request))
+    return out
+
+
+@router.post("/import/start")
+def import_start(request: Request, token: str = Body(...), mapping: dict = Body(...), platform: str = Body(""),
+                 channel: str = Body(""), label: str = Body(""), push: bool = Body(False), u=Depends(current_user)):
+    from . import post_import
+    try:
+        return post_import.start_import(token, mapping, platform, channel, label, push, u)
+    except post_import.ImportError_ as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/import/jobs")
+def import_jobs(u=Depends(current_user)):
+    from . import post_import
+    return post_import.jobs()
+
+
+@router.get("/import/jobs/{jid}")
+def import_job(jid: int, u=Depends(current_user)):
+    from . import post_import
+    from .masking import mask_text
+    out = post_import.job_out(jid, with_posts=True)
+    if not out:
+        raise HTTPException(404)
+    if not can(u, "IO"):
+        for p in out.get("top", []):
+            p["excerpt"] = mask_text(p["excerpt"])
+    return out
+
+
+@router.post("/import/jobs/{jid}/cancel")
+def import_cancel(jid: int, u=Depends(require("IO"))):
+    from . import post_import
+    return {"cancelled": post_import.cancel(jid)}
+
+
 # ----------------------------------------------------------------------------- internet discovery
 
 def _hit_out(h, p, u):
