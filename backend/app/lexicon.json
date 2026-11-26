@@ -353,17 +353,10 @@
         "prescription required",
         "doctor's prescription",
         "licensed pharmacy",
-        "toy gun",
-        "toy pistol",
-        "water pistol",
-        "water gun",
-        "nerf",
         "arms licence",
         "arms license",
         "gun licence",
         "gun license",
-        "shooting range",
-        "shooting academy",
         "csc centre",
         "csc center",
         "aadhaar update camp",
@@ -629,6 +622,26 @@
         "बिना लाइसेंस",
         "बिना वेरिफिकेशन",
         "पुलिस का डर नहीं"
+      ]
+    },
+    "lookalike": {
+      "label": "Harmless look-alike (toy, sport)",
+      "weight": 0,
+      "cap": 0,
+      "terms": [
+        "toy gun",
+        "toy pistol",
+        "water pistol",
+        "water gun",
+        "nerf",
+        "shooting range",
+        "shooting academy",
+        "water guns",
+        "toy guns",
+        "air rifle",
+        "air pistol",
+        "cap gun",
+        "pichkari"
       ]
     }
   },

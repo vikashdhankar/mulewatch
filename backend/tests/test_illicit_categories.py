@@ -42,6 +42,7 @@ def test_illicit_sale_ads_are_flagged(text, category):
     "Nasha mukti abhiyan: say no to drugs. Drug free Rajasthan ke liye call karein",
     "Snowfall in Shimla today ❄️❄️ so beautiful, planning a trip next week",
     "Toy gun 🔫 and water pistol for Holi, home delivery available, order now",
+    "Holi special: water guns 🔫 aur pichkari, home delivery. Water pistol, toy gun, gulal combo. Wholesale rate, ready stock",
     "Aadhaar update camp at CSC centre tomorrow, bring original documents. Visit official website uidai",
     "HP ink cartridges available, home delivery, best rate list in Jaipur",
     "9mm plywood sheets ready stock, home delivery all Jaipur",
@@ -53,6 +54,11 @@ def test_illicit_sale_ads_are_flagged(text, category):
 def test_same_words_in_everyday_posts_stay_low(text):
     score, cat = _score(text)
     assert score < 30 and cat == "Benign", (score, cat)
+
+
+def test_toy_words_do_not_hide_a_weapon_ad():
+    score, cat = _score("Toy gun nahi, asli pistol chahiye? 9mm ready stock, no licence needed. DM t.me/x_demo")
+    assert score >= 55 and cat == "Arms Sale", (score, cat)
 
 
 def test_banking_category_wins_when_both_appear():

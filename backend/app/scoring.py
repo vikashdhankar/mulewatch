@@ -55,7 +55,7 @@ def rule_engine(hits: list[dict], entities: dict, stats: dict, text_for_rules: s
 
     points, parts, reasons = 0.0, [], []
     for group, terms in by_group.items():
-        if group in gated:
+        if group in gated or group == "lookalike":       # look-alikes only cancel the word they contain
             continue
         spec = GROUPS[group]
         raw = sum(spec["weight"] * term_multiplier(t, stats) for t in terms)
@@ -144,6 +144,14 @@ def fraud_attempt_cues(text: str) -> list[str]:
     return list(dict.fromkeys(label for label, rx in FRAUD_ATTEMPT if rx.search(text or "")))
 
 
+def _drop_covered(hits: list[dict]) -> list[dict]:
+    """A drug / arms / document word inside a harmless phrase ("pistol" in "water pistol", "gun" in "toy gun")
+    is not that word: drop it."""
+    safe = [(h["start"], h["end"]) for h in hits if h["group"] in ("awareness", "lookalike")]
+    return [h for h in hits if not (h["group"] in ILLICIT_TERMS and any(a <= h["start"] and h["end"] <= b and (a, b) != (h["start"], h["end"])
+                                                                        for a, b in safe))]
+
+
 def categorize(by_group: set, entities: dict, score: float) -> str:
     if "fraud_attempt" in by_group and score >= 30:
         return "Reported Fraud Attempt"
@@ -172,8 +180,8 @@ def categorize(by_group: set, entities: dict, score: float) -> str:
 def analyze(text: str, ocr_text: str = "", stats: dict | None = None, llm: dict | None = None,
             citizen: bool = False) -> dict:
     stats = stats or {}
-    text_hits = find_keywords(text)
-    ocr_hits = [dict(h, source="image") for h in find_keywords(ocr_text)] if ocr_text else []
+    text_hits = _drop_covered(find_keywords(text))
+    ocr_hits = [dict(h, source="image") for h in _drop_covered(find_keywords(ocr_text))] if ocr_text else []
     entities = extract_entities(text + ("\n" + ocr_text if ocr_text else ""))
     spans = entities.pop("_spans")
     text_spans = [s for s in spans if s["end"] <= len(text)]
