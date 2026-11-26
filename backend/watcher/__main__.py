@@ -55,6 +55,8 @@ def main(argv=None):
     rp.add_argument("--limit", type=int, default=None)
     rp.add_argument("--window-hours", type=float, default=None,
                     help="replay only the last N hours in real time; older posts become history (no alerts)")
+    rp.add_argument("--no-llm", action="store_true", help="no LLM second opinion (no model server needed)")
+    rp.add_argument("--estimate", action="store_true", help="print post counts and running time; process nothing")
     sub.add_parser("retrain")
     sub.add_parser("health")
     ex = sub.add_parser("export-feedback")
@@ -87,7 +89,13 @@ def main(argv=None):
         except KeyboardInterrupt:
             pass
     elif args.cmd == "replay":
-        from .replay import parse_speed, replay
+        from .replay import estimate, parse_speed, replay
+        if args.estimate:
+            print(json.dumps(estimate(args.file, parse_speed(args.speed), cfg["replay"]["max_gap_s"],
+                                      args.window_hours, args.limit)))
+            return
+        if args.no_llm:
+            cfg = config.merge(cfg, {"llm": {"enabled": False}})
         proc = build(cfg)
         out = replay(args.file, proc, parse_speed(args.speed), cfg["replay"]["max_gap_s"], args.push, args.limit,
                      window_hours=args.window_hours)

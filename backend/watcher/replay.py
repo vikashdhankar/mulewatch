@@ -39,15 +39,33 @@ def load(path) -> list[dict]:
     return rows
 
 
+def split_window(rows: list[dict], window_hours: float | None) -> tuple[list[dict], list[dict]]:
+    """(history, window): the window is the last window_hours up to the newest post."""
+    if not window_hours or not rows:
+        return [], rows
+    start = utc_naive(rows[-1]["date"]) - timedelta(hours=window_hours)
+    history = [r for r in rows if utc_naive(r["date"]) < start]
+    return history, rows[len(history):]
+
+
+def estimate(path, speed: float = 50.0, max_gap: float = 5.0, window_hours: float | None = None,
+             limit: int | None = None) -> dict:
+    """What a replay would do, without processing anything: post counts and running time."""
+    history, rows = split_window(load(path), window_hours)
+    rows = rows[:limit] if limit else rows
+    times = [utc_naive(r["date"]) for r in rows]
+    seconds = sum(min(max(0.0, (b - a).total_seconds() / speed), max_gap) for a, b in zip(times, times[1:]))
+    return {"history_posts": len(history), "posts": len(rows), "channels": len({r["channel"].lower() for r in rows}),
+            "from": times[0].isoformat(timespec="minutes") if times else None,
+            "to": times[-1].isoformat(timespec="minutes") if times else None,
+            "replay_minutes": round(seconds / 60, 1)}
+
+
 def replay(path, processor, speed: float = 50.0, max_gap: float = 5.0, push: bool = False, limit: int | None = None,
            sleep=time.sleep, recompute_every: int = 10, window_hours: float | None = None) -> dict:
-    rows = load(path)
-    history = []
-    if window_hours and rows:
-        start = utc_naive(rows[-1]["date"]) - timedelta(hours=window_hours)
-        history = [r for r in rows if utc_naive(r["date"]) < start]
-        rows = rows[len(history):]
-        log.info("history: %d posts before %s (no alerts)", len(history), start.isoformat(timespec="minutes"))
+    history, rows = split_window(load(path), window_hours)
+    if history:
+        log.info("history: %d posts before %s (no alerts)", len(history), rows[0]["date"] if rows else "-")
         for i, r in enumerate(history, 1):
             processor.handle(r, history=True)
             if i % 500 == 0:

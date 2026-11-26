@@ -347,6 +347,9 @@ def test_replay_window_uses_older_posts_as_history(tmp_path):
     f.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     p, sent = proc()
     sleeps = []
+    from watcher.replay import estimate
+    est = estimate(f, speed=60, max_gap=5, window_hours=24)
+    assert (est["history_posts"], est["posts"], est["replay_minutes"]) == (2, 1, 0)
     out = replay(f, p, speed=60, max_gap=5, sleep=sleeps.append, window_hours=24)
     assert out["history"] == 2 and out["history_posts"] == 2 and out["posts"] == 1
     assert sleeps == []                                                   # history goes through without pauses
