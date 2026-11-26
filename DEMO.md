@@ -78,6 +78,7 @@ Use a demo database of its own, so the real one stays untouched.
 ```bash
 export MW_DATA_DIR="$PWD/backend/data/demo"
 rm -rf "$MW_DATA_DIR"
+./run.sh add-sp      # the line above deleted the SP account: create it again (asks for the password)
 ./run.sh
 ```
 
@@ -118,5 +119,24 @@ export MW_DATA_DIR="$PWD/backend/data/demo"
 rm -rf backend/data/demo
 ```
 
+This also deletes the SP account in the demo database; the next run creates it again with `./run.sh add-sp`.
+
 Decisions taken during the demo stay in the demo database. Export them to research only if they should
 count as labelled data (*Export decisions to research* on the watcher page).
+
+## SP / Super Admin account
+
+Sh. Sumit Mehada, Superintendent of Police, Police Headquarters, Jaipur, signs in as `sp`. It is the
+**Supervisor** role, the top one (every page, Officers, Audit log); the header shows it as *Super Admin (SP)*.
+
+```bash
+export MW_DATA_DIR="$PWD/backend/data/demo"   # the same data folder as the command center
+./run.sh add-sp                               # asks for the password; prints the database it wrote to
+./run.sh add-sp --username sp.mehada          # another username
+```
+
+- The demo reset (`rm -rf backend/data/demo`, or `rm -rf "$MW_DATA_DIR"` above) and `./run.sh --reset`
+  delete this account. Run `./run.sh add-sp` again after every reset.
+- Running it again on an existing account resets its password, re-enables it and signs out its old sessions.
+- For a script, `SP_PASSWORD='...' ./run.sh add-sp` skips the prompt. Don't write the password into this file
+  or any other file in the repo; give it to the SP in person.

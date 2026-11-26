@@ -86,6 +86,25 @@ cp .env.example .env        # set FORUM_URL / FORUM_MOD_TOKEN (and optional Tele
 * Dev mode for the UI: `cd frontend && npm run dev` (proxies the API on :8000).
 * Tests: `cd backend && python -m pytest -q`
 
+### SP / Super Admin account
+
+The account for the Superintendent of Police (Sh. Sumit Mehada, Police Headquarters, Jaipur): username `sp`, role
+**Supervisor**, the top role (every page, Officers, Audit log). The header and the Officers page show it as
+**Super Admin (SP)**; that is only a label, not a separate role.
+
+```bash
+./run.sh add-sp                        # asks for the password (8+ characters, letters with numbers or symbols)
+./run.sh add-sp --username sp.mehada   # another username
+SP_PASSWORD='...' ./run.sh add-sp      # no prompt, for scripts (the password lands in your shell history)
+```
+
+* It writes to the server's database, so set `MW_DATA_DIR` the same way for both. It prints the database file.
+* Running it again resets the password, re-enables the account as Supervisor and signs out its old sessions.
+  On an empty database it creates the demo accounts first, as the server would.
+* `./run.sh --reset` (or deleting `backend/data`) deletes this account too: run `./run.sh add-sp` again.
+* The password is never printed or stored in the repo: give it to the SP in person.
+* The old command `cd backend && ../.venv/bin/python create_sp_admin.py` still works.
+
 ### Telegram bot: phone alerts + citizen reporting
 One bot does both jobs.
 1. Telegram → **@BotFather** → `/newbot` → name it (e.g. *MuleWatch Report*) and pick a username ending in `bot` (e.g. `SKITMuleWatchBot`; `MuleWatchBot` itself may be taken). Copy the token.
