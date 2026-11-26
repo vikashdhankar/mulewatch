@@ -131,12 +131,15 @@ The VPS runs three systemd services behind CyberPanel/OpenLiteSpeed (which proxi
 
 | Site | Service | Local port |
 |---|---|---|
-| https://charcha.openhippo.in (behind Cloudflare Access: sign in with an allowed email) | `charcha` | 8100 |
+| https://charcha.openhippo.in (behind Cloudflare Access: people sign in with an allowed email; MuleWatch uses a service token) | `charcha` | 8100 |
 | https://mulewatch.openhippo.in | `mulewatch` | 8000 |
 | https://atmlens.openhippo.in | `atmlens` | 8010 |
 
 All three bind to `127.0.0.1` only, so no firewall ports need opening, and every response carries `X-Robots-Tag: noindex`.
-MuleWatch watches the forum locally (`FORUM_URL=http://127.0.0.1:8100`), so Cloudflare Access does not affect it.
+The server's own MuleWatch watches the forum locally (`FORUM_URL=http://127.0.0.1:8100`), so Cloudflare Access does not affect it.
+A **laptop** MuleWatch uses `FORUM_URL=https://charcha.openhippo.in` and passes Access with a Cloudflare service token in
+`FORUM_HEADERS` (see `.env.example`); the headers go only to the forum's address. Operations, backups and rollback:
+[`deploy/new-vps/README.md`](deploy/new-vps/README.md#charcha-forum-operations).
 
 * Fresh install on a new server: see [`deploy/new-vps/README.md`](deploy/new-vps/README.md).
 * Update after pushing to GitHub (on the server, as root):
