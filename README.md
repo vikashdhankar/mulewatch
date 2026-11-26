@@ -61,6 +61,19 @@ TP 19  FP 0  TN 48  FN 0   precision 1.00  recall 1.00     (python training/eval
 ```
 It's a small synthetic set, so treat this as a sanity check rather than a benchmark.
 
+**On real third-party data** (`backend/evaluate_external.py`). No public dataset of real mule-recruitment ads exists, so
+we test the neighbouring problem. [ScamShield-IN](https://huggingface.co/datasets/haxrits/ScamShield-IN) has 578 labelled
+Indian SMS (129 fraud: OTP, KYC, UPI, lottery, promo; 449 legitimate; the rest of the file is not SMS). At the *High* level:
+**0 of 449 legitimate messages flagged** (false-positive rate 0%, 95% CI 0–1%), and **0 of 129 general SMS frauds flagged**.
+That second number is expected: MuleWatch looks for the sale or rental of accounts, cards and kits, not OTP or
+lottery scams, so this set backs the "doesn't flag normal messages" claim, not a claim about catching mule ads.
+```bash
+mkdir -p datasets/scamshield-in   # git-ignored; download sms_fraud_classification.json from the link above into it
+cd backend && ../.venv/bin/python evaluate_external.py scamshield ../datasets/scamshield-in/sms_fraud_classification.json
+# any labelled CSV, e.g. Kaggle "Real or Fake Job Posting" (EMSCAD):
+../.venv/bin/python evaluate_external.py csv fake_job_postings.csv --text-col title+description --label-col fraudulent --positive 1
+```
+
 ---
 
 ## Run it (laptop)
