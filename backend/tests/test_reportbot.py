@@ -12,7 +12,7 @@ from app.db import Post, Report, SessionLocal, init_db  # noqa: E402
 from app.ml import model, retrain  # noqa: E402
 from app.pipeline import base_training_set  # noqa: E402
 
-POSTER = Path(__file__).resolve().parents[2] / "forum" / "seed" / "images" / "kit_poster.png"
+POSTER = Path(__file__).resolve().parents[2] / "forum" / "seed" / "images" / "kit_poster_v2.png"
 
 
 class FakeTG:

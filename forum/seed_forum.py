@@ -25,10 +25,10 @@ POSTS = [
     ("rohit_traders", "JaipurBazaar", 50, "All bank current account full kit available 🔥",
      "Current account + savings account available. Full kit — ATM, passbook, cheque book, net banking, SIM.\n"
      "KYC done, high limit. Gaming / P2P work ke liye best.\nRate 18k per account. Telegram only: t.me/kitwala_jpr",
-     "", "kit_poster.png", 3, [("ankit_sharma", "Reported. This is literally money mule activity."), ("sonu_bhai_deals", "dm kiya bhai")]),
+     "", "kit_poster_v2.png", 3, [("ankit_sharma", "Reported. This is literally money mule activity."), ("sonu_bhai_deals", "dm kiya bhai")]),
     ("quickdeals_jpr", "GamingAdda", 30, "Gaming payout account chahiye? DM",
      "Bhai log jinko gaming / betting ke liye withdrawal account chahiye, ready account hai.\n"
-     "HDFC / ICICI / Kotak sab milega. Call or WA +91 01290 41736", "", "kit_poster_repost.jpg", 2, []),
+     "HDFC / ICICI / Kotak sab milega. Call or WA +91 01290 41736", "", "kit_poster_repost_v2.jpg", 2, []),
     ("sharma_enterprises", "PaisaTalk", 20, "Corporate account available for business use",
      "Firm current a/c available with net banking + ATM. 2 year old account, no questions asked.\n"
      "Bulk available for agents. Contact t.me/kitwala_jpr or +91 0129041736", "", "", 1, []),
@@ -43,7 +43,7 @@ POSTS = [
     ("earnfromhome_21", "NaukriAlerts", 40, "Work from home — earn ₹30,000/month, no investment",
      "Students, housewives sab apply karo. Kaam simple hai — bas apna bank account kiraye pe do, hum gaming "
      "transactions ke liye use karenge. Har mahine 30k guaranteed.\nPayment UPI se: earnfast21@ybl\nWhatsApp +91 01148 25519",
-     "", "earn_poster.png", 6, [("meena_r", "Isme fas mat jana koi, account freeze ho jata hai.")]),
+     "", "earn_poster_v2.png", 6, [("meena_r", "Isme fas mat jana koi, account freeze ho jata hai.")]),
     ("priya_jobs", "CampusCorner", 18, "Part time income for college students 💸",
      "Rent your bank account for 3 months and earn 25k. Only need ATM card + net banking details.\n"
      "Safe and genuine, 200+ students already earning. DM on WhatsApp", "https://wa.me/910114825519", "", 5, []),

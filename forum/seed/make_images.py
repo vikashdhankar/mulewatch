@@ -92,7 +92,8 @@ def passbook(name, overlay):
 
 def main():
     # --- scam posters ------------------------------------------------------------
-    p = poster("kit_poster.png", [
+    # "_v2": these posters now carry +91 0... demo numbers; a new name gets past caches holding the old images
+    p = poster("kit_poster_v2.png", [
         ("ALL BANK", 64, "fg"), ("CURRENT ACCOUNT", 76, "accent"), ("FULL KIT AVAILABLE", 64, "fg"),
         ("", 30, "fg"),
         ("ATM + PASSBOOK + CHEQUE BOOK", 40, "fg"), ("NET BANKING + SIM", 40, "fg"),
@@ -103,9 +104,9 @@ def main():
     # edited repost of the same poster (cropped + tinted) -> perceptual-hash match
     p2 = p.crop((20, 20, 880, 1080)).resize((900, 1100))
     tint = Image.new("RGB", p2.size, (40, 0, 0))
-    Image.blend(p2, tint, 0.12).save(OUT / "kit_poster_repost.jpg", quality=80)
+    Image.blend(p2, tint, 0.12).save(OUT / "kit_poster_repost_v2.jpg", quality=80)
 
-    poster("earn_poster.png", [
+    poster("earn_poster_v2.png", [
         ("EARN ₹30,000 / MONTH", 66, "accent"), ("", 20, "fg"),
         ("Bas apna bank account", 52, "fg"), ("kiraye pe do!", 60, "fg"), ("", 30, "fg"),
         ("✓ Ghar baithe income", 40, "fg"), ("✓ Students & housewives welcome", 36, "fg"),

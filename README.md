@@ -191,7 +191,7 @@ Full step-by-step demonstration guide with setup commands, URLs, script and trou
 
    Within ~3 seconds a **Critical** alert slides in with a chime — and the post has already joined the existing **kitwala ring** because it reuses that Telegram handle.
 3. Ask a second judge to post something harmless (*"Selling my cycle, 3000, call …"*) — it shows up in the feed as Low and raises no alert.
-4. Image trick: post only a poster image with the text "DM karo" (use `forum/seed/images/kit_poster_repost.jpg`). OCR reads the poster, perceptual hashing matches it to the original poster, and it lands in the same ring.
+4. Image trick: post only a poster image with the text "DM karo" (use `forum/seed/images/kit_poster_repost_v2.jpg`). OCR reads the poster, perceptual hashing matches it to the original poster, and it lands in the same ring.
 5. Open the case: highlighted evidence, OCR text, score breakdown, linked posts → **Seller network** shows the ring.
 6. Click **Request takedown** → refresh the forum post: it's blurred with a Cyber Cell notice. Click **Evidence report (PDF)**.
 7. Click **False positive** on a borderline case to show the model retraining and rescoring live.
