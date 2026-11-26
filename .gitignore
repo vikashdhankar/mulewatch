@@ -6,5 +6,6 @@ node_modules/
 backend/data/
 forum/data/
 .env
+.env.bak*
 *.log
 .DS_Store
