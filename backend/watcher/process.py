@@ -69,10 +69,14 @@ class Processor:
         self.cfg, self.redactor, self.model, self.llm = cfg, redactor, model, llm
         self.sender, self.Session, self.places = sender, session_factory, places
         self.dirty = False                # cases created since the last recompute
-        self.counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "duplicate": 0}
+        self.counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "duplicate": 0, "history": 0}
 
-    def handle(self, raw: dict, mode: str = "live", push: bool = True) -> Outcome | None:
-        """Process one post (collector record format). Returns None if it was processed before."""
+    def handle(self, raw: dict, mode: str = "live", push: bool = True, history: bool = False) -> Outcome | None:
+        """Process one post (collector record format). Returns None if it was processed before.
+        history: score and store it (identifiers, channel rate) but raise no case or alert: posts from before a
+        replay's demo window, so novelty and bursts in the window behave as they would live."""
+        if history:
+            mode, push = "history", False
         ch, mid = raw["channel"].lower(), int(raw["message_id"])
         uid = raw.get("post_id") or f"tg:{ch}:{mid}"
         raw = dict(raw, post_id=uid, channel=ch, link=raw.get("link") or f"https://t.me/{ch}/{mid}")
@@ -109,7 +113,7 @@ class Processor:
             store.touch(s, ch, posted_at, mid)
             out = Outcome(uid, ch, mid, level, score, cls.category, cls.p, wp.id)
             message = None
-            if level in ("HIGH", "MEDIUM"):
+            if level in ("HIGH", "MEDIUM") and not history:
                 post = self._case(s, raw, blob, wp, cls, sig, parts, score, level)
                 wp.post_id = out.post_id = post.id
                 wp.district = (post.jurisdiction or {}).get("district") or wp.district
@@ -130,7 +134,7 @@ class Processor:
                             case_url=f"{PUBLIC_BASE_URL}/case/{post.id}", cues=list(cls.cues)),
                             self.cfg["alerts"]["max_text_chars"])
             s.commit()
-            self.counts[level] += 1
+            self.counts["history" if history else level] += 1
             if message is not None:
                 out.pushed = self._push(out.alert_id, message)
         log.info("%s/%s -> %s %.0f %s p=%.2f%s", ch, mid, level, score, cls.category, cls.p,

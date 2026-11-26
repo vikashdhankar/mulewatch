@@ -62,7 +62,8 @@ def health_report(s) -> dict:
         .order_by(WatchPost.id.desc()).limit(50).all()
     lags = sorted((a - b).total_seconds() for a, b in recent if a and b)
     day = now - timedelta(hours=24)
-    by_route = dict(s.query(WatchPost.route, func.count(WatchPost.id)).filter(WatchPost.processed_at >= day)
+    by_route = dict(s.query(WatchPost.route, func.count(WatchPost.id)).filter(WatchPost.processed_at >= day,
+                                                                               WatchPost.mode != "history")
                     .group_by(WatchPost.route).all())
     return {
         "paused": bool(cfg.get("paused")) or get_setting("watcher_paused") == "1",

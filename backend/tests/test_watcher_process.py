@@ -18,7 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402
 
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app import auth  # noqa: E402
 from app.config import DATA_DIR  # noqa: E402
+from app.main import app  # noqa: E402
 from app.db import Alert, EvidenceFile, Post, SessionLocal, WatchChannel, WatchIdent, WatchPost, init_db  # noqa: E402
 from app.pipeline import recompute_all, rescore_all  # noqa: E402
 from watcher import config  # noqa: E402
@@ -60,6 +64,7 @@ class Sent(list):
 
 def setup_module():
     init_db()
+    auth.ensure_demo_users()
 
 
 def proc(**kw):
@@ -331,6 +336,31 @@ def test_replay_paces_posts_and_never_realerts(tmp_path):
     assert again["duplicate"] == 3
     with SessionLocal() as s:
         assert s.query(Alert).count() == n_alerts
+
+
+def test_replay_window_uses_older_posts_as_history(tmp_path):
+    f = tmp_path / "telegram.jsonl"
+    same = kit(108)
+    rows = [rec("rt_window", 1, same, minutes_ago=60 * 30),               # 30 h before the newest post
+            rec("rt_window", 2, kit(109), minutes_ago=60 * 26),
+            rec("rt_window", 3, same.replace("18k", "17k"), minutes_ago=60)]   # same identifiers, in the window
+    f.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    p, sent = proc()
+    sleeps = []
+    out = replay(f, p, speed=60, max_gap=5, sleep=sleeps.append, window_hours=24)
+    assert out["history"] == 2 and out["history_posts"] == 2 and out["posts"] == 1
+    assert sleeps == []                                                   # history goes through without pauses
+    with SessionLocal() as s:
+        hist = s.query(WatchPost).filter(WatchPost.channel == "rt_window", WatchPost.mode == "history").all()
+        assert len(hist) == 2 and all(w.post_id is None for w in hist)    # no case, no alert
+        assert all(w.route == "HIGH" for w in hist)                       # but scored as they would be
+        live = s.query(WatchPost).filter_by(uid="tg:rt_window:3").one()
+        assert live.mode == "replay" and live.post_id
+        assert live.breakdown["new_identifier"] == 0                      # seen in the history
+    c = TestClient(app)
+    c.post("/api/auth/login", json={"username": "analyst", "password": auth.DEMO_PASSWORD})
+    feed = c.get("/api/watcher/alerts", params={"route": "HIGH,MEDIUM", "limit": 500}).json()["items"]
+    assert [i["post_id"] for i in feed if i["channel"] == "rt_window"] == [live.post_id]
 
 
 def test_raw_bytes_are_stable():

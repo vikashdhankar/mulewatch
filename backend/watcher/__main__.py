@@ -53,6 +53,8 @@ def main(argv=None):
     rp.add_argument("--speed", default="50x")
     rp.add_argument("--push", action="store_true", help="also send HIGH alerts to the linked Telegram chat")
     rp.add_argument("--limit", type=int, default=None)
+    rp.add_argument("--window-hours", type=float, default=None,
+                    help="replay only the last N hours in real time; older posts become history (no alerts)")
     sub.add_parser("retrain")
     sub.add_parser("health")
     ex = sub.add_parser("export-feedback")
@@ -87,7 +89,8 @@ def main(argv=None):
     elif args.cmd == "replay":
         from .replay import parse_speed, replay
         proc = build(cfg)
-        out = replay(args.file, proc, parse_speed(args.speed), cfg["replay"]["max_gap_s"], args.push, args.limit)
+        out = replay(args.file, proc, parse_speed(args.speed), cfg["replay"]["max_gap_s"], args.push, args.limit,
+                     window_hours=args.window_hours)
         print(json.dumps(out))
     elif args.cmd == "retrain":
         m = build(cfg, retrain=True).model

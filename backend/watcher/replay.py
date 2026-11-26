@@ -1,9 +1,14 @@
 """Replay collected posts through the live pipeline, so real-time alerts can be shown without waiting for new
 posts. The gaps between posts are their real gaps divided by --speed, capped at replay.max_gap_s. Posts already
-processed (live or in an earlier replay) are skipped, so a replay never alerts twice."""
+processed (live or in an earlier replay) are skipped, so a replay never alerts twice.
+
+window_hours: only the last N hours of the file (up to its newest post) are replayed in real time. Older
+posts are processed first, without pauses, as history: they are scored and remembered (identifiers, channel
+posting rates) but raise no case or alert. Post times are never changed, so evidence keeps the real ones."""
 import logging
 import re
 import time
+from datetime import timedelta
 
 from common.io import iter_jsonl
 
@@ -35,8 +40,20 @@ def load(path) -> list[dict]:
 
 
 def replay(path, processor, speed: float = 50.0, max_gap: float = 5.0, push: bool = False, limit: int | None = None,
-           sleep=time.sleep, recompute_every: int = 10) -> dict:
-    rows = load(path)[:limit] if limit else load(path)
+           sleep=time.sleep, recompute_every: int = 10, window_hours: float | None = None) -> dict:
+    rows = load(path)
+    history = []
+    if window_hours and rows:
+        start = utc_naive(rows[-1]["date"]) - timedelta(hours=window_hours)
+        history = [r for r in rows if utc_naive(r["date"]) < start]
+        rows = rows[len(history):]
+        log.info("history: %d posts before %s (no alerts)", len(history), start.isoformat(timespec="minutes"))
+        for i, r in enumerate(history, 1):
+            processor.handle(r, history=True)
+            if i % 500 == 0:
+                log.info("history: %d/%d", i, len(history))
+                heartbeat("replay")
+    rows = rows[:limit] if limit else rows
     log.info("replaying %d posts from %s at %sx", len(rows), path, speed)
     prev, since, cases = None, time.monotonic(), 0
     for r in rows:
@@ -56,4 +73,4 @@ def replay(path, processor, speed: float = 50.0, max_gap: float = 5.0, push: boo
             since = time.monotonic()
     processor.recompute(push=push)
     heartbeat("replay_done")
-    return dict(processor.counts, posts=len(rows))
+    return dict(processor.counts, posts=len(rows), history_posts=len(history))

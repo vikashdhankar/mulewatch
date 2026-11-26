@@ -56,6 +56,7 @@ Telegram unless you add `--push`. Replayed rows are marked `replay`.
 | Command | What it does |
 |---|---|
 | `run --once` | one polling cycle, then exit |
+| `replay FILE --window-hours 12` | replay only the last 12 h in real time; older posts are history (scored, no alerts) |
 | `health` | last poll per channel, polling lag, review-queue size (also `GET /api/watcher/health`) |
 | `retrain` | rebuild the fallback TF-IDF + LR model, including reviewers' decisions exported earlier |
 | `export-feedback` | write reviewed posts to `research/store/annotations/watcher/` as labelled data (also a button on the page) |
