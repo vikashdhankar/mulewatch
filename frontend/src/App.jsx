@@ -4,6 +4,7 @@ import { api, can, caseId, roleLabel, timeAgo } from "./api";
 import { useAuth } from "./auth";
 import { LangSwitch, T, useT } from "./i18n";
 import Bulk from "./pages/Bulk";
+import ImportPosts from "./pages/ImportPosts";
 import { Icon, RiskBadge } from "./components/ui";
 import { useLive } from "./live";
 import Analyze from "./pages/Analyze";
@@ -32,6 +33,7 @@ const NAV = [
   ["/complaints", "Victim complaints", "file", "IO"],
   ["/analyze", "Check a post", "scan", "ANALYST"],
   ["/bulk", "Bulk link check", "list", "ANALYST"],
+  ["/import", "Import dataset", "download", "ANALYST"],
   ["/discovery", "Internet discovery", "search", "ANALYST"],
   ["/watchlist", "Watchlist", "eye", "ANALYST"],
   ["/sources", "Monitored sources", "globe", "ANALYST"],
@@ -177,6 +179,8 @@ export default function App() {
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/bulk" element={<Bulk />} />
             <Route path="/bulk/:id" element={<Bulk />} />
+            <Route path="/import" element={<ImportPosts />} />
+            <Route path="/import/:id" element={<ImportPosts />} />
             <Route path="*" element={<p>{t("Page not found.")} <Link to="/">{t("Back to the command center")}</Link></p>} />
           </Routes>
         </main>

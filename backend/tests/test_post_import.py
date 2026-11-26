@@ -51,7 +51,8 @@ def test_parse_time_formats():
     assert post_import.parse_time("2026-11-20T10:15:00+05:30") == datetime(2026, 11, 20, 4, 45)
     assert post_import.parse_time("1700000000") == datetime(2023, 11, 14, 22, 13, 20)
     assert post_import.parse_time("1700000000000") == datetime(2023, 11, 14, 22, 13, 20)
-    assert post_import.parse_time("20/11/2026 14:30") == datetime(2026, 11, 20, 14, 30)
+    assert post_import.parse_time("20/11/2026 14:30") == datetime(2026, 11, 20, 9, 0)      # no zone: IST
+    assert post_import.parse_time("2026-11-20 14:30:00Z") == datetime(2026, 11, 20, 14, 30)
     assert post_import.parse_time("") is None and post_import.parse_time("yesterday") is None
 
 
@@ -79,7 +80,7 @@ def test_csv_import_scores_keeps_time_and_channel_and_dedupes():
     assert top["risk_level"] in ("High", "Critical") and top["platform"] == "Telegram · @kit_wala_test"
     with SessionLocal() as s:
         kit = s.get(Post, top["id"])
-        assert kit.source == "import" and kit.posted_at == datetime(2026, 10, 1, 9, 30)
+        assert kit.source == "import" and kit.posted_at == datetime(2026, 10, 1, 4, 0)   # 09:30 IST
         assert "+919829041736" in kit.entities.get("phone", []) and kit.evidence_hash
         normal = s.query(Post).filter(Post.source == "import", Post.text == NORMAL).one()
         assert normal.risk_level == "Low"
@@ -95,7 +96,7 @@ def test_telegram_export_zip_with_image():
     buf = io.BytesIO()
     Image.new("RGB", (40, 30), "white").save(buf, "PNG")
     export = {"name": "Khata Kiraya Test", "type": "public_channel", "id": 1, "messages": [
-        {"id": 10, "type": "message", "date": "2026-09-05T12:00:00", "from": "Khata Kiraya Test",
+        {"id": 10, "type": "message", "date": "2026-09-05T12:00:00", "date_unixtime": "1788000000", "from": "Khata Kiraya Test",
          "text": ["Account ", {"type": "bold", "text": "kiraye pe do"}, " - 30k monthly, ATM + passbook bhejo"],
          "photo": "photos/photo_1.png"},
         {"id": 11, "type": "service", "date": "2026-09-05T12:01:00", "action": "pin_message"},
@@ -108,13 +109,13 @@ def test_telegram_export_zip_with_image():
     up = c.post("/api/import/upload", files={"file": ("export.zip", z.getvalue(), "application/zip")}).json()
     assert up["format"] == "Telegram export in a ZIP" and up["rows"] == 1 and up["images"] == 1
     assert up["platform"] == "Telegram" and up["channel"] == "Khata Kiraya Test"
-    assert up["mapping"]["text"] == "text" and up["mapping"]["photo"] == "image" and up["mapping"]["date"] == "time"
+    assert up["mapping"]["text"] == "text" and up["mapping"]["photo"] == "image" and up["mapping"]["date_unixtime"] == "time" and up["mapping"]["date"] == ""
     j = _wait(c, c.post("/api/import/start", json={"token": up["token"], "mapping": up["mapping"]}).json()["id"])
     assert j["added"] == 1 and j["images"] == 1, j
     with SessionLocal() as s:
         p = s.get(Post, j["top"][0]["id"])
         assert p.text.startswith("Account kiraye pe do") and p.image_path.startswith("import_") and p.image_phash
-        assert p.platform == "Telegram · Khata Kiraya Test" and p.posted_at == datetime(2026, 9, 5, 12, 0)
+        assert p.platform == "Telegram · Khata Kiraya Test" and p.posted_at == datetime.utcfromtimestamp(1788000000)
 
 
 def test_jsonl_and_json_list_and_errors():

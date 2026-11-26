@@ -109,6 +109,12 @@ export const api = {
   bulkJob: (id) => req(`/api/bulk/${id}`),
   bulkCreate: (text, label) => req("/api/bulk", json("POST", { text, label })),
   bulkUpload: (file, label) => { const f = new FormData(); f.append("file", file); f.append("label", label || ""); return req("/api/bulk/upload", { method: "POST", body: f }); },
+  // dataset import (posts)
+  importUpload: (file) => { const f = new FormData(); f.append("file", file); return req("/api/import/upload", { method: "POST", body: f }); },
+  importStart: (body) => req("/api/import/start", json("POST", body)),
+  importJobs: () => req("/api/import/jobs"),
+  importJob: (id) => req(`/api/import/jobs/${id}`),
+  importCancel: (id) => req(`/api/import/jobs/${id}/cancel`, { method: "POST" }),
   bulkCancel: (id) => req(`/api/bulk/${id}/cancel`, { method: "POST" }),
 
   // monitoring

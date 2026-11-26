@@ -447,6 +447,7 @@ code.shared { background: var(--crit-soft); color: #a5162a; padding: 0 5px; bord
 .map-tbl { max-height: 420px; overflow: auto; margin-bottom: 12px; }
 .map-tbl .ex { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .import-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.check-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .import-row label { flex: 1; min-width: 180px; }
 .imp-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-2); }
 

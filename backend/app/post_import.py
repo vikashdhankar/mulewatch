@@ -21,13 +21,14 @@ import threading
 import time
 import traceback
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
 
 from . import audit
 from .config import MEDIA_DIR
 from .db import Post, SessionLocal
 
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
 MAX_FILE = 60 * 1024 * 1024
 MAX_ROWS = 20000
 MAX_IMAGE = 6 * 1024 * 1024
@@ -184,8 +185,10 @@ def guess_mapping(columns: list[str], defaults: dict) -> dict:
         if field:
             used.add(field)
     if defaults.get("platform") == "Telegram":            # Telegram export: these are the useful columns
-        out = {c: {"text": "text", "date": "time", "id": "external_id", "from": "author", "photo": "image"}.get(c, "")
-               for c in columns}
+        tg = {"text": "text", "date": "time", "id": "external_id", "from": "author", "photo": "image"}
+        if "date_unixtime" in columns:                     # exact UTC; "date" is the exporting PC's local time
+            tg = tg | {"date": "", "date_unixtime": "time"}
+        out = {c: tg.get(c, "") for c in columns}
     return out
 
 
@@ -225,7 +228,8 @@ def parse_upload(filename: str, data: bytes, user) -> dict:
 # ----------------------------------------------------------------------------- one row -> post fields
 
 def parse_time(v: str) -> datetime | None:
-    """ISO 8601, Unix seconds or milliseconds, or the usual Indian date formats. Returns naive UTC."""
+    """ISO 8601, Unix seconds or milliseconds, or the usual Indian date formats. Returns naive UTC.
+    A time without a zone is read as IST (local exports from Indian units, Telegram Desktop's "date")."""
     v = str(v or "").strip()
     if not v:
         return None
@@ -234,16 +238,21 @@ def parse_time(v: str) -> datetime | None:
         return datetime.fromtimestamp(x / 1000 if x > 1e11 else x, timezone.utc).replace(tzinfo=None)
     try:
         d = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return d.astimezone(timezone.utc).replace(tzinfo=None) if d.tzinfo else d
     except ValueError:
-        pass
-    from .complaints import _date
-    for fmt in ("%m/%d/%Y %H:%M", "%m/%d/%Y %I:%M %p", "%d/%m/%Y %I:%M %p", "%Y/%m/%d %H:%M:%S"):
-        try:
-            return datetime.strptime(v, fmt)
-        except ValueError:
-            continue
-    return _date(v)
+        from .complaints import _date
+        d = None
+        for fmt in ("%d/%m/%Y %I:%M %p", "%Y/%m/%d %H:%M:%S"):
+            try:
+                d = datetime.strptime(v, fmt)
+                break
+            except ValueError:
+                continue
+        d = d or _date(v)
+        if not d:
+            return None
+    if not d.tzinfo:
+        d = d.replace(tzinfo=IST)
+    return d.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def row_fields(rec: dict, mapping: dict, defaults: dict) -> dict:
