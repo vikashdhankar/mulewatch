@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { api, can, caseId, ROLE_LABEL, timeAgo } from "./api";
+import { api, can, caseId, roleLabel, timeAgo } from "./api";
 import { useAuth } from "./auth";
 import { LangSwitch, T, useT } from "./i18n";
 import Bulk from "./pages/Bulk";
@@ -101,7 +101,7 @@ function UserMenu() {
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="avatar">{initials}</span>
-        <span className="user-txt"><b>{me.name || me.username}</b><small>{t(ROLE_LABEL[me.role])}</small></span>
+        <span className="user-txt"><b>{me.name || me.username}</b><small>{t(roleLabel(me))}</small></span>
       </button>
       {open && (
         <div className="user-pop" role="menu">

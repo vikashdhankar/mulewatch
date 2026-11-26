@@ -125,6 +125,10 @@ export const api = {
 
 export const LEVELS = ["Critical", "High", "Medium", "Low"];
 export const ROLE_LABEL = { ANALYST: "Analyst", IO: "Investigating Officer", SUPERVISOR: "Supervisor" };
+// Display only: a Supervisor whose designation is Superintendent of Police is shown as "Super Admin (SP)".
+// The role, its rank and its permissions stay SUPERVISOR.
+export const roleLabel = (u) =>
+  u?.role === "SUPERVISOR" && /superintendent of police/i.test(u.designation || "") ? "Super Admin (SP)" : ROLE_LABEL[u?.role];
 export const STATUS = {
   NEW: "New", VERIFIED: "Verified", NOTICE_DRAFTED: "Notice drafted", NOTICE_SENT: "Notice sent",
   CONTENT_REMOVED: "Content removed", FIR_LINKED: "Linked to FIR", CLOSED_NO_ACTION: "Closed – no action",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useT } from "../i18n";
-import { api, istTime, ROLE_LABEL } from "../api";
+import { api, istTime, ROLE_LABEL, roleLabel } from "../api";
 import { useAuth } from "../auth";
 import { Empty } from "../components/ui";
 
@@ -46,7 +46,7 @@ export default function Officers() {
               <tr key={u.id} className={u.active ? "" : "muted"}>
                 <td><b>{u.name}</b><div className="small muted">{u.username} · {u.designation}{u.police_station && ` · ${u.police_station}`}</div></td>
                 <td><select value={u.role} disabled={u.id === me.id} onChange={(e) => patch(u, { role: e.target.value })}>
-                  {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
+                  {Object.keys(ROLE_LABEL).map((k) => <option key={k} value={k}>{t(roleLabel({ ...u, role: k }))}</option>)}
                 </select></td>
                 <td className="small">{u.telegram_linked ? t("linked") : "—"}</td>
                 <td className="small">{u.last_login ? istTime(u.last_login) : t("never")}</td>
