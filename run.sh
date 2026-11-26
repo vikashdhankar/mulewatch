@@ -15,10 +15,21 @@
 #                                replay collected posts (e.g. research/store/raw/telegram.jsonl)
 #   ./run.sh watcher health|retrain|export-feedback|run --once   (see backend/watcher/README.md)
 #
+#   ./run.sh add-sp [--username sp]   create or reset the SP / Super Admin account (SUPERVISOR); asks for
+#                                the password, or takes it from SP_PASSWORD. Uses MW_DATA_DIR like the server.
+#
 # If the default port is taken by another program, the next free port is used automatically.
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
+
+if [ "${1:-}" = add-sp ]; then
+  shift
+  [ -x .venv/bin/python ] || { echo "!! No Python environment yet: run ./run.sh once first, then ./run.sh add-sp"; exit 1; }
+  echo "==> SP / Super Admin account"
+  cd backend
+  exec ../.venv/bin/python -m app.sp_admin "$@"
+fi
 
 WATCHER=0; WARGS=()
 if [ "${1:-}" = watcher ]; then WATCHER=1; shift; WARGS=("$@"); set --; fi
@@ -33,7 +44,7 @@ while [ $# -gt 0 ]; do
     --port=*) PORT="${1#*=}" ;;
     --forum-port) FPORT="$2"; shift ;;
     --forum-port=*) FPORT="${1#*=}" ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see ./run.sh --help)"; exit 1 ;;
   esac
   shift
