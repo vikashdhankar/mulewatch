@@ -489,7 +489,7 @@ def test_backend_text_shown_in_hindi_has_a_translation():
     import re
     from app.scoring import categorize
     cats = set(re.findall(r'return "([^"]+)"', inspect.getsource(categorize)))
-    assert len(cats) == 8 and cats <= set(brief.CATEGORY_HI)
+    assert len(cats) == 11 and cats <= set(brief.CATEGORY_HI)
     assert brief._when(datetime(2026, 10, 17, 9, 5), True) == "17 अक्टूबर 2026 09:05"
     assert brief._district("Jaipur", True) == "जयपुर" and brief._district("Jaipur", False) == "Jaipur"
     assert brief._district("", True) == ""

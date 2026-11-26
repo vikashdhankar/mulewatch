@@ -864,6 +864,16 @@
 "Post id": "पोस्ट आईडी",
 "Times without a time zone are read as IST.": "बिना टाइम ज़ोन वाले समय को IST माना जाता है।",
 "Demo number (not a real mobile) standing for the {circle} circle": "डेमो नंबर (असली मोबाइल नहीं), {circle} सर्किल के लिए",
+"Drug Sale": "नशीले पदार्थों की बिक्री",
+"Arms Sale": "अवैध हथियार बिक्री",
+"Fake Documents": "फर्जी दस्तावेज़",
 "demo number": "डेमो नंबर",
-"Numbers starting +91 0 cannot belong to anyone; the demo data uses them": "+91 0 से शुरू होने वाले नंबर किसी के नहीं हो सकते; डेमो डेटा इन्हीं का उपयोग करता है"
+"Numbers starting +91 0 cannot belong to anyone; the demo data uses them": "+91 0 से शुरू होने वाले नंबर किसी के नहीं हो सकते; डेमो डेटा इन्हीं का उपयोग करता है",
+"Drug name or slang": "नशीले पदार्थ का नाम या कोड शब्द",
+"Illegal arms language": "अवैध हथियार की भाषा",
+"Fake document offer": "फर्जी दस्तावेज़ की पेशकश",
+"Drug emoji code": "नशे का इमोजी कोड",
+"Weapon emoji": "हथियार इमोजी",
+"Covert-sale cue (discreet, no police, no licence)": "छुपी बिक्री का संकेत (गुप्त पैकिंग, पुलिस का डर नहीं, बिना लाइसेंस)",
+"Sale / delivery language": "बिक्री / डिलीवरी की भाषा"
 }

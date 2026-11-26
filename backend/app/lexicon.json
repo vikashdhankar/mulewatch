@@ -1,5 +1,5 @@
 {
-  "_doc": "Lexicon of risk indicators. group weight is applied once per distinct term (capped per group). Investigator feedback adapts each term via keyword_stats. Add Hindi/Hinglish variants freely.",
+  "_doc": "Lexicon of risk indicators. group weight is applied once per distinct term (capped per group). Investigator feedback adapts each term via keyword_stats. Add Hindi/Hinglish variants freely. Drug, arms and fake-document groups only add up to a high score together with sale or delivery language (combos); an emoji alone never does.",
   "groups": {
     "mule_kit": {
       "label": "Mule-account sale language",
@@ -330,7 +330,305 @@
         "be careful",
         "सावधान",
         "कभी न बेचें",
-        "जागरूक"
+        "जागरूक",
+        "seized",
+        "busted",
+        "arrested",
+        "recovered",
+        "giraftar",
+        "griftar",
+        "pakda gaya",
+        "police ne pakda",
+        "jabt",
+        "nasha mukti",
+        "nasha mukt",
+        "say no to drugs",
+        "drug free",
+        "anti-narcotics",
+        "ndps act",
+        "de-addiction",
+        "rehab centre",
+        "rehab center",
+        "with prescription",
+        "prescription required",
+        "doctor's prescription",
+        "licensed pharmacy",
+        "toy gun",
+        "toy pistol",
+        "water pistol",
+        "water gun",
+        "nerf",
+        "arms licence",
+        "arms license",
+        "gun licence",
+        "gun license",
+        "shooting range",
+        "shooting academy",
+        "csc centre",
+        "csc center",
+        "aadhaar update camp",
+        "uidai",
+        "official website",
+        "गिरफ्तार",
+        "बरामद",
+        "जब्त",
+        "ज़ब्त",
+        "नशा मुक्ति",
+        "नशा मुक्त"
+      ]
+    },
+    "drug_term": {
+      "label": "Drug name or slang",
+      "weight": 22,
+      "cap": 40,
+      "terms": [
+        "ganja",
+        "gaanja",
+        "charas",
+        "malana cream",
+        "hashish",
+        "hash oil",
+        "weed",
+        "marijuana",
+        "cannabis",
+        "og kush",
+        "hydro weed",
+        "smack",
+        "heroin",
+        "cocaine",
+        "mdma",
+        "ecstasy",
+        "lsd",
+        "acid tabs",
+        "blotter",
+        "meth",
+        "crystal meth",
+        "mephedrone",
+        "meow meow",
+        "md drug",
+        "md powder",
+        "md crystal",
+        "afeem",
+        "opium",
+        "doda post",
+        "doda chura",
+        "poppy husk",
+        "codeine syrup",
+        "corex",
+        "phensedyl",
+        "tramadol",
+        "alprazolam",
+        "nitrazepam",
+        "nitro tabs",
+        "proxyvon",
+        "spasmo proxyvon",
+        "party pills",
+        "nashe ka saman",
+        "nasha saman",
+        "गांजा",
+        "गाँजा",
+        "चरस",
+        "स्मैक",
+        "अफीम",
+        "डोडा पोस्त",
+        "डोडा चूरा",
+        "हेरोइन",
+        "चिट्टा",
+        "एमडी ड्रग",
+        "नशीली गोलियां",
+        "नशे का सामान",
+        "chitta maal",
+        "chitta available",
+        "molly pills"
+      ]
+    },
+    "drug_emoji": {
+      "label": "Drug emoji code",
+      "weight": 8,
+      "cap": 16,
+      "terms": [
+        "🍁",
+        "🌿",
+        "🍃",
+        "💊",
+        "❄",
+        "🍄",
+        "💉",
+        "🔌"
+      ]
+    },
+    "arms_term": {
+      "label": "Illegal arms language",
+      "weight": 24,
+      "cap": 42,
+      "terms": [
+        "desi katta",
+        "tamancha",
+        "country made pistol",
+        "country-made pistol",
+        "desi pistol",
+        "pistol",
+        "revolver",
+        "mauser",
+        "315 bore",
+        "312 bore",
+        "32 bore",
+        "12 bore",
+        ".32 bore",
+        "kartoos",
+        "kartus",
+        "live rounds",
+        "ak47",
+        "ak-47",
+        "ak 47",
+        "illegal arms",
+        "illegal weapon",
+        "weapon available",
+        "hathiyar",
+        "hathyar",
+        "asla",
+        "देसी कट्टा",
+        "तमंचा",
+        "पिस्तौल",
+        "पिस्टल",
+        "रिवॉल्वर",
+        "कारतूस",
+        "हथियार",
+        "असलहा",
+        "बंदूक",
+        "katta pistol",
+        "katta available",
+        "katte available",
+        "9mm pistol",
+        "9 mm pistol",
+        "9mm rounds",
+        "live cartridges",
+        "pistol cartridges",
+        "pistol ki goli"
+      ]
+    },
+    "arms_emoji": {
+      "label": "Weapon emoji",
+      "weight": 8,
+      "cap": 16,
+      "terms": [
+        "🔫",
+        "💣"
+      ]
+    },
+    "fake_doc": {
+      "label": "Fake document offer",
+      "weight": 24,
+      "cap": 42,
+      "terms": [
+        "fake aadhaar",
+        "fake aadhar",
+        "duplicate aadhaar",
+        "duplicate aadhar",
+        "edited aadhaar",
+        "aadhaar edit",
+        "aadhar edit",
+        "fake pan",
+        "fake pan card",
+        "pan card without documents",
+        "aadhaar without documents",
+        "without any document",
+        "bina document",
+        "bina documents",
+        "fake marksheet",
+        "fake mark sheet",
+        "marksheet available",
+        "fake degree",
+        "degree available",
+        "degree without exam",
+        "any university degree",
+        "backdated degree",
+        "fake driving licence",
+        "fake driving license",
+        "dl without test",
+        "licence without test",
+        "license without test",
+        "fake passport",
+        "fake voter id",
+        "fake rc",
+        "dob change without proof",
+        "fake certificate",
+        "fake documents",
+        "फर्जी आधार",
+        "नकली आधार",
+        "फर्जी पैन",
+        "फर्जी मार्कशीट",
+        "फर्जी डिग्री",
+        "बिना दस्तावेज़",
+        "बिना दस्तावेज",
+        "फर्जी दस्तावेज"
+      ]
+    },
+    "illicit_sale_cue": {
+      "label": "Sale / delivery language (counts next to drugs, arms or documents)",
+      "weight": 10,
+      "cap": 25,
+      "terms": [
+        "home delivery",
+        "doorstep delivery",
+        "door delivery",
+        "cash on delivery",
+        "cod available",
+        "all india delivery",
+        "delivery all india",
+        "pan india delivery",
+        "same day delivery",
+        "safe delivery",
+        "100% safe",
+        "no risk",
+        "rate list",
+        "price list",
+        "dm for price",
+        "dm for rate",
+        "inbox for price",
+        "wholesale",
+        "bulk order",
+        "ready stock",
+        "fresh stock",
+        "order now",
+        "quality guaranteed",
+        "top quality",
+        "pure quality",
+        "100% pure",
+        "urgent delivery",
+        "होम डिलीवरी"
+      ]
+    },
+    "covert_cue": {
+      "label": "Covert-sale cue (discreet, no police, no licence)",
+      "weight": 12,
+      "cap": 24,
+      "terms": [
+        "discreet",
+        "discreet packing",
+        "discreet packaging",
+        "stealth",
+        "stealth shipping",
+        "no police",
+        "police se safe",
+        "police ka dar nahi",
+        "maal available",
+        "maal ready",
+        "stuff available",
+        "without licence",
+        "without license",
+        "bina licence",
+        "bina license",
+        "no licence needed",
+        "no license needed",
+        "without verification",
+        "no verification",
+        "dm for menu",
+        "माल उपलब्ध",
+        "माल तैयार",
+        "बिना लाइसेंस",
+        "बिना वेरिफिकेशन",
+        "पुलिस का डर नहीं"
       ]
     }
   },
@@ -350,6 +648,110 @@
       ],
       "bonus": 10,
       "label": "Financial instrument + KYC-evasion cue"
+    },
+    {
+      "all": [
+        "drug_term",
+        "illicit_sale_cue"
+      ],
+      "bonus": 30,
+      "label": "Drug + sale/delivery language"
+    },
+    {
+      "all": [
+        "drug_term",
+        "sale_intent"
+      ],
+      "bonus": 18,
+      "label": "Drug + sale intent"
+    },
+    {
+      "all": [
+        "drug_emoji",
+        "drug_term"
+      ],
+      "bonus": 10,
+      "label": "Drug slang reinforced by emoji"
+    },
+    {
+      "all": [
+        "arms_term",
+        "illicit_sale_cue"
+      ],
+      "bonus": 30,
+      "label": "Weapon + sale/delivery language"
+    },
+    {
+      "all": [
+        "arms_term",
+        "sale_intent"
+      ],
+      "bonus": 18,
+      "label": "Weapon + sale intent"
+    },
+    {
+      "all": [
+        "arms_emoji",
+        "arms_term"
+      ],
+      "bonus": 10,
+      "label": "Weapon language reinforced by emoji"
+    },
+    {
+      "all": [
+        "fake_doc",
+        "illicit_sale_cue"
+      ],
+      "bonus": 25,
+      "label": "Fake document + sale/delivery language"
+    },
+    {
+      "all": [
+        "fake_doc",
+        "sale_intent"
+      ],
+      "bonus": 18,
+      "label": "Fake document + sale intent"
+    },
+    {
+      "all": [
+        "drug_emoji",
+        "covert_cue"
+      ],
+      "bonus": 18,
+      "label": "Drug emoji + covert-sale cue"
+    },
+    {
+      "all": [
+        "arms_emoji",
+        "covert_cue"
+      ],
+      "bonus": 18,
+      "label": "Weapon emoji + covert-sale cue"
+    },
+    {
+      "all": [
+        "drug_term",
+        "covert_cue"
+      ],
+      "bonus": 30,
+      "label": "Drug + covert-sale cue"
+    },
+    {
+      "all": [
+        "arms_term",
+        "covert_cue"
+      ],
+      "bonus": 30,
+      "label": "Weapon + covert-sale cue"
+    },
+    {
+      "all": [
+        "fake_doc",
+        "covert_cue"
+      ],
+      "bonus": 25,
+      "label": "Fake document + covert-sale cue"
     }
   ],
   "image_terms": [

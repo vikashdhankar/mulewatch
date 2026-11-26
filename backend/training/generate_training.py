@@ -91,9 +91,87 @@ def benign():
     return random.choice(forms)()
 
 
+# --- illegal goods other than banking material (drugs, arms, fake documents) -----------------------------
+# Appended AFTER the original 660 rows so those stay identical. Hard negatives matter most here: police news,
+# de-addiction drives, prescriptions, toy guns, printer cartridges, a "katta" (sack) of grain, plants, snow.
+CITIES = ["Jaipur", "Jodhpur", "Kota", "Ajmer", "Udaipur", "Bikaner", "Alwar", "Sikar", "Bhilwara", "Barmer"]
+DRUG = ["ganja", "charas", "Malana cream", "smack", "MD powder", "mephedrone", "MDMA pills", "LSD blotter",
+        "afeem", "doda post", "codeine syrup", "nitro tabs", "hash oil", "OG kush", "heroin", "गांजा", "स्मैक", "अफीम"]
+DRUG_EMOJI = ["🍁", "🌿🍃", "💊", "❄️", "🍄", "🔌"]
+ARMS = ["desi katta", "tamancha", "country made pistol", "9mm pistol", "315 bore", "32 bore revolver", "mauser",
+        "kartoos", "live cartridges", "देसी कट्टा", "तमंचा", "पिस्टल", "कारतूस"]
+DOCS = ["fake aadhaar", "duplicate aadhar", "fake PAN card", "fake marksheet", "fake degree", "backdated degree",
+        "fake driving licence", "DL without test", "fake voter ID", "फर्जी आधार", "फर्जी मार्कशीट", "फर्जी डिग्री"]
+CUE = ["home delivery", "discreet packing", "all india delivery", "same day delivery", "cash on delivery",
+       "DM for rate", "price list inbox", "ready stock", "100% pure", "no police tension", "bina licence",
+       "stealth shipping", "wholesale rate", "fresh stock", "होम डिलीवरी", "माल उपलब्ध"]
+QTY = ["1 gram", "5 gm", "10 gm", "per tola", "per piece", "per sheet", "1 kg", "per strip", "per bottle"]
+IPRICE = ["₹800", "₹1500", "2k", "₹3,500", "Rs 600", "₹12000", "25k", "₹45,000", "8k only"]
+
+
+def illicit():
+    c, cue = random.choice(CITIES), random.choice(CUE)
+    d, a, f, e = random.choice(DRUG), random.choice(ARMS), random.choice(DOCS), random.choice(DRUG_EMOJI)
+    forms = [
+        lambda: f"{e} {d} available in {c}, {cue}. {random.choice(IPRICE)} {random.choice(QTY)}. {random.choice(CONTACT)} {tg()}",
+        lambda: f"{d} aur {random.choice(DRUG)} milega, {cue}, {c} mein same din. WhatsApp {phone()}",
+        lambda: f"Party ke liye {e} {d} ready hai bhai, {cue}. Rate {random.choice(IPRICE)}. Call {phone()}",
+        lambda: f"{c} {e}{e} maal ready, {random.choice(['discreet packing', 'stealth shipping', 'no police tension'])}, "
+                f"{random.choice(['all india delivery', 'cash on delivery'])}. {tg()}",
+        lambda: f"{d} {random.choice(QTY)} {random.choice(IPRICE)} — {cue}. Payment {upi()}",
+        lambda: f"{a} available, {random.choice(['bina licence', 'no licence needed', 'ready stock'])}. {c} delivery. "
+                f"Price {random.choice(IPRICE)}. DM {tg()}",
+        lambda: f"🔫 {a} + {random.choice(['kartoos', 'live rounds', '20 cartridges'])} milenge, {cue}. Contact {phone()}",
+        lambda: f"{a} bechna hai, {random.choice(['naya', 'fresh piece', 'used par sahi'])}, {c} mein hand delivery. Rate {random.choice(IPRICE)}. {phone()}",
+        lambda: f"{random.choice(ARMS)} aur {random.choice(ARMS)} ka maal ready, police ka dar nahi. WhatsApp {phone()}",
+        lambda: f"{f} {random.choice(['2 din mein', 'same day', '24 ghante mein'])}, {random.choice(['bina documents', 'without any document', 'no verification'])}. "
+                f"{random.choice(IPRICE)}. {random.choice(CONTACT)} {phone()}",
+        lambda: f"{f} aur {random.choice(DOCS)} banwao, {random.choice(['any university', 'any state', 'all India valid'])}. Price inbox. {tg()}",
+        lambda: f"Need {f}? Original jaisa, scanning mein pass. {cue}. UPI {upi()}",
+        lambda: f"{d} उपलब्ध है, {random.choice(['होम डिलीवरी', 'माल उपलब्ध', 'बिना लाइसेंस'])}, संपर्क करें {phone()}",
+        lambda: f"{random.choice(['देसी कट्टा', 'तमंचा', 'पिस्टल'])} बिक्री के लिए, कारतूस भी, संपर्क {phone()}",
+        lambda: f"{random.choice(['फर्जी आधार', 'फर्जी मार्कशीट', 'फर्जी डिग्री'])} बिना दस्तावेज़, 2 दिन में, संपर्क {phone()}",
+    ]
+    return random.choice(forms)()
+
+
+def illicit_benign():
+    c = random.choice(CITIES)
+    forms = [
+        lambda: f"{c} police ne {random.randint(2, 40)} kg {random.choice(DRUG)} ke saath {random.randint(1, 5)} logon ko giraftar kiya, NDPS act mein case darj.",
+        lambda: f"{c} mein {random.choice(['desi katta', 'tamancha', 'illegal arms'])} ke saath yuvak pakda gaya, police ne kartoos bhi baramad kiye.",
+        lambda: f"Fake marksheet racket busted in {c}: police arrested {random.randint(2, 6)} people and seized fake degrees.",
+        lambda: f"Nasha mukti abhiyan {c}: say no to drugs. De-addiction help 14446 par call karein.",
+        lambda: f"Anti-narcotics awareness rally in {c} schools tomorrow. Drug free Rajasthan!",
+        lambda: f"Codeine syrup and tramadol are sold only with prescription at our licensed pharmacy in {c}.",
+        lambda: f"{c} medical store: home delivery of medicines with doctor's prescription, call {phone()}",
+        lambda: f"Toy gun 🔫 and water pistol sale for Holi, {random.choice(['home delivery', 'ready stock', 'wholesale rate'])}. {c} Toy Mart {phone()}",
+        lambda: f"Nerf guns and toy pistols for kids' birthday, {random.choice(IPRICE)}, home delivery in {c}.",
+        lambda: f"HP and Canon ink cartridges {random.choice(['ready stock', 'wholesale rate', 'home delivery'])}, {c}. Call {phone()}",
+        lambda: f"1 katta {random.choice(['gehun', 'chawal', 'cement', 'khad'])} {random.choice(['50 kg', '25 kg'])} {random.choice(IPRICE)}, home delivery {c}.",
+        lambda: f"Fresh {random.choice(['mint 🌿', 'tulsi 🌿', 'curry leaves 🍃', 'methi 🍃'])} and organic veggies, home delivery in {c}, order now.",
+        lambda: f"Maple 🍁 wood furniture sale, {random.choice(['ready stock', 'home delivery', 'all india delivery'])}. {c} Furnishers.",
+        lambda: f"Snowfall in Shimla ❄️❄️ trip from {c}, 3 nights package {random.choice(IPRICE)}. DM for details.",
+        lambda: f"AC and fridge ❄️ sale, home delivery and installation in {c}. Price list inbox.",
+        lambda: f"Aadhaar update camp at CSC centre {c}, bring original documents. Visit the official UIDAI website.",
+        lambda: f"PAN card apply online on the official website, CSC centre {c} helps with documents.",
+        lambda: f"Driving licence test slots open at RTO {c}, apply online with documents.",
+        lambda: f"Arms licence renewal camp at collectorate {c} on Monday, bring your old licence.",
+        lambda: f"{c} shooting academy: air rifle and pistol training for national trials, admissions open.",
+        lambda: f"Mushroom 🍄 farming training in {c}, home delivery of oyster mushroom, {random.choice(IPRICE)} per kg.",
+        lambda: f"सावधान! फर्जी आधार और फर्जी डिग्री बनाने वाले गिरोह से बचें, शिकायत 1930 पर करें।",
+        lambda: f"{c} पुलिस ने {random.randint(2, 30)} किलो गांजा जब्त किया, दो आरोपी गिरफ्तार।",
+        lambda: f"नशा मुक्ति केंद्र {c}: नशा छोड़ने के लिए संपर्क करें {phone()}",
+    ]
+    return random.choice(forms)()
+
+
 def main():
     rows = [{"text": suspicious(), "label": 1} for _ in range(330)] + [{"text": benign(), "label": 0} for _ in range(330)]
     random.shuffle(rows)
+    extra = [{"text": illicit(), "label": 1} for _ in range(180)] + [{"text": illicit_benign(), "label": 0} for _ in range(180)]
+    random.shuffle(extra)
+    rows += extra
     out = Path(__file__).parent / "training_data.jsonl"
     out.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
     print(f"wrote {len(rows)} samples -> {out}")

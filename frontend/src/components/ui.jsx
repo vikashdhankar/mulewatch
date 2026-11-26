@@ -69,12 +69,17 @@ export function ScoreMeter({ score, level, size = 120 }) {
 const GROUP_CLASS = {
   mule_kit: "hl-strong", card_sale: "hl-strong", payout_lure: "hl-strong",
   evasion: "hl-warn", financial_object: "hl-soft", sale_intent: "hl-soft", awareness: "hl-good",
+  drug_term: "hl-strong", arms_term: "hl-strong", fake_doc: "hl-strong", drug_emoji: "hl-warn", arms_emoji: "hl-warn",
+  covert_cue: "hl-warn", illicit_sale_cue: "hl-soft",
 };
 const PRIORITY = { "hl-strong": 5, "hl-ent": 4, "hl-warn": 3, "hl-good": 2, "hl-soft": 1 };
 const GROUP_LABEL = {
   mule_kit: "Mule-account sale language", card_sale: "Card sale", payout_lure: "Recruiting account holders",
   evasion: "KYC evasion / trust cue", financial_object: "Financial instrument", sale_intent: "Sale / rent intent",
   awareness: "Awareness context (lowers risk)",
+  drug_term: "Drug name or slang", arms_term: "Illegal arms language", fake_doc: "Fake document offer",
+  drug_emoji: "Drug emoji code", arms_emoji: "Weapon emoji", covert_cue: "Covert-sale cue (discreet, no police, no licence)",
+  illicit_sale_cue: "Sale / delivery language",
 };
 
 export { GROUP_CLASS, GROUP_LABEL };
