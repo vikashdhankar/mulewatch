@@ -126,13 +126,13 @@ count as labelled data (*Export decisions to research* on the watcher page).
 
 ## SP / Super Admin account
 
-Sh. Sumit Mehada, Superintendent of Police, Police Headquarters, Jaipur, signs in as `sp`. It is the
+Sh. Sumeet Meharda, Superintendent of Police, Police Headquarters, Jaipur, signs in as `sp`. It is the
 **Supervisor** role, the top one (every page, Officers, Audit log); the header shows it as *Super Admin (SP)*.
 
 ```bash
 export MW_DATA_DIR="$PWD/backend/data/demo"   # the same data folder as the command center
 ./run.sh add-sp                               # asks for the password; prints the database it wrote to
-./run.sh add-sp --username sp.mehada          # another username
+./run.sh add-sp --username sp.meharda          # another username
 ```
 
 - The demo reset (`rm -rf backend/data/demo`, or `rm -rf "$MW_DATA_DIR"` above) and `./run.sh --reset`

@@ -101,13 +101,13 @@ cp .env.example .env        # set FORUM_URL / FORUM_MOD_TOKEN (and optional Tele
 
 ### SP / Super Admin account
 
-The account for the Superintendent of Police (Sh. Sumit Mehada, Police Headquarters, Jaipur): username `sp`, role
+The account for the Superintendent of Police (Sh. Sumeet Meharda, Police Headquarters, Jaipur): username `sp`, role
 **Supervisor**, the top role (every page, Officers, Audit log). The header and the Officers page show it as
 **Super Admin (SP)**; that is only a label, not a separate role.
 
 ```bash
 ./run.sh add-sp                        # asks for the password (8+ characters, letters with numbers or symbols)
-./run.sh add-sp --username sp.mehada   # another username
+./run.sh add-sp --username sp.meharda   # another username
 SP_PASSWORD='...' ./run.sh add-sp      # no prompt, for scripts (the password lands in your shell history)
 ```
 

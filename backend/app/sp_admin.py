@@ -6,7 +6,7 @@ the audit log, assignment of any case and override of any status.
 Run it with the same data folder (MW_DATA_DIR) the server will use:
 
   ./run.sh add-sp                              # username "sp", asks for the password
-  ./run.sh add-sp --username sp.mehada
+  ./run.sh add-sp --username sp.meharda
   SP_PASSWORD='...' ./run.sh add-sp            # no prompt, for scripts
 
 or from the backend folder: ../.venv/bin/python -m app.sp_admin [--username ...]
@@ -53,7 +53,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="./run.sh add-sp", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--username", default="sp")
-    ap.add_argument("--name", default="Sh. Sumit Mehada")
+    ap.add_argument("--name", default="Sh. Sumeet Meharda")
     ap.add_argument("--designation", default="Superintendent of Police")
     ap.add_argument("--station", default="Police Headquarters, Jaipur")
     a = ap.parse_args(argv)

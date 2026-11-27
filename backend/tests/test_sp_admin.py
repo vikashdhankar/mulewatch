@@ -60,9 +60,9 @@ def test_creates_sp_on_empty_db_and_keeps_demo_users(tmp_path):
 
 
 def test_old_create_sp_admin_command_still_works(tmp_path):
-    r = run_cli(tmp_path, PW1, "--username", "SP.Mehada", script=("create_sp_admin.py",))
+    r = run_cli(tmp_path, PW1, "--username", "SP.Meharda", script=("create_sp_admin.py",))
     assert r.returncode == 0, r.stdout + r.stderr
-    assert users_in(tmp_path / DB_FILE)["sp.mehada"][0] == "SUPERVISOR"
+    assert users_in(tmp_path / DB_FILE)["sp.meharda"][0] == "SUPERVISOR"
 
 
 def test_weak_password_is_rejected(tmp_path, monkeypatch, capsys):
