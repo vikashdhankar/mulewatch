@@ -29,7 +29,7 @@ export default function Watchlist() {
       </div>
       <form className="panel watch-form" onSubmit={add}>
         <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label={t("Type")}>{KINDS.map(([k, l]) => <option key={k} value={k}>{t(l)}</option>)}</select>
-        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("e.g. +919829041736 or earnfast21@ybl")} aria-label={t("Value")} />
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("e.g. +910129041736 or earnfast21@ybl")} aria-label={t("Value")} />
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("Note (optional)")} aria-label={t("Note")} />
         <button className="btn btn-primary"><Icon name="plus" /> {t("Add")}</button>
       </form>

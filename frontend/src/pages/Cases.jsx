@@ -5,7 +5,8 @@ import { api, LEVELS, STATUS } from "../api";
 import { Empty, PostRow } from "../components/ui";
 import { useLive } from "../live";
 
-const CATEGORIES = ["Mule Account Sale", "Account-Holder Recruitment", "Card Sale", "KYC Fraud", "Easy-Money Lure", "Reported Fraud Attempt", "Suspicious Financial Ad", "Benign"];
+const CATEGORIES = ["Mule Account Sale", "Account-Holder Recruitment", "Card Sale", "KYC Fraud", "Easy-Money Lure", "Drug Sale", "Arms Sale", "Fake Documents", "Reported Fraud Attempt", "Suspicious Financial Ad", "Benign",
+  "Payout Mule", "Account Sale", "USDT P2P", "Crypto Investment Scam", "Task/Job Scam"];       // the last five: Telegram watcher
 
 export default function Cases() {
   const { t } = useT();
@@ -58,6 +59,7 @@ export default function Cases() {
           <option value="manual">{t("Manual checks")}</option>
           <option value="extension">{t("Chrome extension")}</option>
           <option value="telegram">{t("Telegram channels")}</option>
+          <option value="watcher">{t("Telegram watcher")}</option>
           <option value="bulk">{t("Bulk link checks")}</option>
           <option value="discovery">{t("Internet discovery")}</option>
         </select>

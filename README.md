@@ -45,8 +45,8 @@ Demo sign-in: `analyst`, `io`, `sho` with password `mule@2026` (created on first
 | Expected outcome | How MuleWatch does it |
 |---|---|
 | Collect publicly available ad data | Live crawler polls monitored sources every 3 s and reads **every new post and every new comment** (sellers often hide ads in comments; each comment is scored as its own case and can be taken down on its own). Forum crawler reads the schema.org `DiscussionForumPosting` JSON-LD real sites publish; Telegram crawler reads public channel previews (`t.me/s/<channel>`). **Any single link** can be checked (post, ad, Telegram post, web page or image) or added as a monitored page that's re-checked every minute. Plus manual check page and a Chrome extension. |
-| Identify keywords, images, phone numbers, URLs, payment details | Multilingual lexicon (English, Hindi, Hinglish) with obfuscation handling (`acc0unt`, `a.t.m`, `r3ady`); extraction of Indian phone numbers in any grouping, UPI IDs, Telegram/WhatsApp links, IFSC, card numbers (masked), crypto wallets, short links, prices; **OCR** (Tesseract, eng+hin) on images. |
-| Classify ads by risk indicators | Hybrid score = noisy-OR of rule engine, character n-gram text classifier, image cues (and optional Claude second opinion) → Low / Medium / High / Critical, with categories: Mule Account Sale, Account-Holder Recruitment, Card Sale, KYC Fraud. |
+| Identify keywords, images, phone numbers, URLs, payment details | Multilingual lexicon (English, Hindi, Hinglish) with obfuscation handling (`acc0unt`, `a.t.m`, `r3ady`); extraction of Indian phone numbers in any grouping, UPI IDs, Telegram/WhatsApp links, IFSC, card numbers (masked), crypto wallets, short links, prices; **OCR** (Tesseract, eng+hin) on images. Drug, arms and fake-document slang and emoji codes (🍁 ❄ 💊 🔫) count only next to sale or delivery language, so news of a seizure, a de-addiction drive or a toy shop stays low. |
+| Classify ads by risk indicators | Hybrid score = noisy-OR of rule engine, character n-gram text classifier, image cues (and optional Claude second opinion) → Low / Medium / High / Critical, with categories: Mule Account Sale, Account-Holder Recruitment, Card Sale, KYC Fraud, and for other illegal trade Drug Sale, Arms Sale, Fake Documents. |
 | Detect repeated / coordinated ads | MinHash-LSH near-duplicate text, perceptual-hash reposted images (catches cropped/tinted copies), and shared identifiers → connected "seller rings" with a ring boost. Interactive network graph. |
 | Provide evidence / context | Every flagged post shows highlighted words, extracted identifiers, OCR text, a per-component score breakdown, linked posts and *why* they're linked. SHA-256 evidence hash at capture time. One-click PDF evidence report. |
 | Alerts + investigation dashboard | Server-Sent Events push alerts to the command center instantly (toast + sound), optional Telegram bot push, case management with verdicts, watchlist, and **request takedown** that marks the post on the forum as under Cyber Cell review. |
@@ -54,12 +54,25 @@ Demo sign-in: `analyst`, `io`, `sho` with password `mule@2026` (created on first
 Extras that matter to investigators: **feedback loop** (Confirm / False positive updates per-keyword precision and retrains the model live), **watchlist** (known numbers/UPI IDs force an alert), **awareness detection** (posts that *warn* about mule accounts are not flagged), and a card photo posted by a student is not treated like a card being sold.
 
 ### Results on unseen data
-The text model is trained on a separate generated corpus (`backend/training/training_data.jsonl`, 660 examples). On the 50 forum posts and 17 comments it has never seen (19 mule, card or easy-money items, 48 normal or tricky look-alikes):
+The text model is trained on a separate generated corpus (`backend/training/training_data.jsonl`, 1,020 examples). On the 62 forum posts and 21 comments it has never seen (27 mule, card, easy-money, drug, arms or fake-document items; 56 normal or tricky look-alikes such as police news, a de-addiction drive, Holi toy guns and a pharmacy):
 
 ```
-TP 19  FP 0  TN 48  FN 0   precision 1.00  recall 1.00     (python training/evaluate.py)
+TP 27  FP 0  TN 56  FN 0   precision 1.00  recall 1.00     (python training/evaluate.py)
 ```
-It's a small synthetic set, so treat this as a sanity check rather than a benchmark.
+It's a small synthetic set written by the same team as the training templates, so treat this as a sanity check rather than a benchmark.
+
+**On real third-party data** (`backend/evaluate_external.py`). No public dataset of real mule-recruitment ads exists, so
+we test the neighbouring problem. [ScamShield-IN](https://huggingface.co/datasets/haxrits/ScamShield-IN) has 578 labelled
+Indian SMS (129 fraud: OTP, KYC, UPI, lottery, promo; 449 legitimate; the rest of the file is not SMS). At the *High* level:
+**0 of 449 legitimate messages flagged** (false-positive rate 0%, 95% CI 0–1%), and **0 of 129 general SMS frauds flagged**.
+That second number is expected: MuleWatch looks for the sale or rental of accounts, cards and kits, not OTP or
+lottery scams, so this set backs the "doesn't flag normal messages" claim, not a claim about catching mule ads.
+```bash
+mkdir -p datasets/scamshield-in   # git-ignored; download sms_fraud_classification.json from the link above into it
+cd backend && ../.venv/bin/python evaluate_external.py scamshield ../datasets/scamshield-in/sms_fraud_classification.json
+# any labelled CSV, e.g. Kaggle "Real or Fake Job Posting" (EMSCAD):
+../.venv/bin/python evaluate_external.py csv fake_job_postings.csv --text-col title+description --label-col fraudulent --positive 1
+```
 
 ---
 
@@ -86,6 +99,25 @@ cp .env.example .env        # set FORUM_URL / FORUM_MOD_TOKEN (and optional Tele
 * Dev mode for the UI: `cd frontend && npm run dev` (proxies the API on :8000).
 * Tests: `cd backend && python -m pytest -q`
 
+### SP / Super Admin account
+
+The account for the Superintendent of Police (Sh. Sumeet Meharda, Police Headquarters, Jaipur): username `sp`, role
+**Supervisor**, the top role (every page, Officers, Audit log). The header and the Officers page show it as
+**Super Admin (SP)**; that is only a label, not a separate role.
+
+```bash
+./run.sh add-sp                        # asks for the password (8+ characters, letters with numbers or symbols)
+./run.sh add-sp --username sp.meharda   # another username
+SP_PASSWORD='...' ./run.sh add-sp      # no prompt, for scripts (the password lands in your shell history)
+```
+
+* It writes to the server's database, so set `MW_DATA_DIR` the same way for both. It prints the database file.
+* Running it again resets the password, re-enables the account as Supervisor and signs out its old sessions.
+  On an empty database it creates the demo accounts first, as the server would.
+* `./run.sh --reset` (or deleting `backend/data`) deletes this account too: run `./run.sh add-sp` again.
+* The password is never printed or stored in the repo: give it to the SP in person.
+* The old command `cd backend && ../.venv/bin/python create_sp_admin.py` still works.
+
 ### Telegram bot: phone alerts + citizen reporting
 One bot does both jobs.
 1. Telegram → **@BotFather** → `/newbot` → name it (e.g. *MuleWatch Report*) and pick a username ending in `bot` (e.g. `SKITMuleWatchBot`; `MuleWatchBot` itself may be taken). Copy the token.
@@ -98,7 +130,7 @@ One bot does both jobs.
 * Replies in seconds with the risk level, the reasons, the phone/UPI/Telegram details it found, whether it's linked to a known seller ring, and safety advice in English and Hindi (with 1930 / cybercrime.gov.in).
 * Files each report as a case tagged *reported by N citizens*; the same ad reported by several people is grouped on one case. A forwarded channel's `t.me/<name>` becomes an identifier, so it links into seller rings.
 * When an investigator clicks **Confirm fraud**, **False positive** or **Request takedown**, everyone who reported that case gets a message.
-* `/status` shows a person their last 5 reports; reporters appear only as an anonymous ID in the command center; 30 reports per person per hour (`REPORTS_PER_HOUR`).
+* `/status` shows a person their last 5 reports; investigators see each reporter's Telegram name, @username and user ID on the case page (every view is in the audit log), and the bot tells reporters so; after a report the bot offers an optional "Share my number" button (Telegram's own number for that account; `/phone` later), shown masked to analysts; an SHO/SP can block a reporter who misuses the bot from the case page (the bot then files nothing from that account; `reporter.blocked` in the audit log); 30 reports per person per hour (`REPORTS_PER_HOUR`).
 * Works from the laptop (long polling), no public URL needed. Only one copy of MuleWatch can run per bot token.
 
 ### Optional: AI analyst
@@ -112,12 +144,15 @@ The VPS runs three systemd services behind CyberPanel/OpenLiteSpeed (which proxi
 
 | Site | Service | Local port |
 |---|---|---|
-| https://charcha.openhippo.in (behind Cloudflare Access: sign in with an allowed email) | `charcha` | 8100 |
+| https://charcha.openhippo.in (behind Cloudflare Access: people sign in with an allowed email; MuleWatch uses a service token) | `charcha` | 8100 |
 | https://mulewatch.openhippo.in | `mulewatch` | 8000 |
 | https://atmlens.openhippo.in | `atmlens` | 8010 |
 
 All three bind to `127.0.0.1` only, so no firewall ports need opening, and every response carries `X-Robots-Tag: noindex`.
-MuleWatch watches the forum locally (`FORUM_URL=http://127.0.0.1:8100`), so Cloudflare Access does not affect it.
+The server's own MuleWatch watches the forum locally (`FORUM_URL=http://127.0.0.1:8100`), so Cloudflare Access does not affect it.
+A **laptop** MuleWatch uses `FORUM_URL=https://charcha.openhippo.in` and passes Access with a Cloudflare service token in
+`FORUM_HEADERS` (see `.env.example`); the headers go only to the forum's address. Operations, backups and rollback:
+[`deploy/new-vps/README.md`](deploy/new-vps/README.md#charcha-forum-operations).
 
 * Fresh install on a new server: see [`deploy/new-vps/README.md`](deploy/new-vps/README.md).
 * Update after pushing to GitHub (on the server, as root):
@@ -140,7 +175,8 @@ sudo bash /opt/charcha-src/deploy/setup-forum-server.sh   # prints the moderatio
 This publishes the forum on port 8100; open that port in the server's firewall, or put it behind your web server.
 
 * Logins: `demo / demo123`, `judge1`, `judge2`, `judge3` / `demo123`
-* Reset the forum to the 50 original posts: `sudo RESEED=1 bash /opt/charcha-src/deploy/setup-forum-server.sh`
+* Reset the forum to the 62 seed posts: `sudo RESEED=1 bash /opt/charcha-src/deploy/setup-forum-server.sh`
+* Add seed posts that aren't on a running forum yet, keeping everything else: `python seed_forum.py --add-missing`
 
 ---
 
@@ -155,7 +191,7 @@ Full step-by-step demonstration guide with setup commands, URLs, script and trou
 
    Within ~3 seconds a **Critical** alert slides in with a chime — and the post has already joined the existing **kitwala ring** because it reuses that Telegram handle.
 3. Ask a second judge to post something harmless (*"Selling my cycle, 3000, call …"*) — it shows up in the feed as Low and raises no alert.
-4. Image trick: post only a poster image with the text "DM karo" (use `forum/seed/images/kit_poster_repost.jpg`). OCR reads the poster, perceptual hashing matches it to the original poster, and it lands in the same ring.
+4. Image trick: post only a poster image with the text "DM karo" (use `forum/seed/images/kit_poster_repost_v2.jpg`). OCR reads the poster, perceptual hashing matches it to the original poster, and it lands in the same ring.
 5. Open the case: highlighted evidence, OCR text, score breakdown, linked posts → **Seller network** shows the ring.
 6. Click **Request takedown** → refresh the forum post: it's blurred with a Cyber Cell notice. Click **Evidence report (PDF)**.
 7. Click **False positive** on a borderline case to show the model retraining and rescoring live.
@@ -222,3 +258,5 @@ The extension submits posts with a shared key instead of a sign-in: set `MW_INGE
 
 ## Responsible use
 MuleWatch is decision support for investigators. Scores and links are leads, not proof; every case needs human verification before action. Only publicly available content is collected. It doesn't identify people beyond what they publicly posted, contact sellers or act on its own: notices and bank letters are drafts for an authorised officer to check and sign, and the legal references in them are a starting point, not legal advice.
+
+**Synthetic data only.** Every user, post, handle and UPI ID in the demo forum, sample files and training data is made up. Phone numbers in them are written `+91 0XXXX XXXXX`: no Indian number starts with 0, so none can belong to a real person (MuleWatch reads them as phone numbers only with the explicit `+91`, and the dashboard marks them "demo number"). Tests that need a real-format mobile use the 9200 series, which is absent from the allotment table.

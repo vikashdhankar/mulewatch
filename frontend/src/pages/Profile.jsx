@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { T, useT } from "../i18n";
-import { api, ROLE_LABEL } from "../api";
+import { api, roleLabel } from "../api";
 import { useAuth } from "../auth";
 
 export default function Profile() {
@@ -24,7 +24,7 @@ export default function Profile() {
     <div>
       <div className="page-head">
         <h1>{t("My account")}</h1>
-        <p>{me.name} · {me.designation} · {t(ROLE_LABEL[me.role])}{me.police_station && ` · ${me.police_station}`}</p>
+        <p>{me.name} · {me.designation} · {t(roleLabel(me))}{me.police_station && ` · ${me.police_station}`}</p>
       </div>
       <div className="two-col">
         <section className="panel">

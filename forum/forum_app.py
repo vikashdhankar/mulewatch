@@ -38,6 +38,27 @@ async def no_index(request, call_next):
     response = await call_next(request)
     response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
     return response
+
+
+class HeadAsGet:
+    """Answer HEAD like GET without a body, so `curl -I` and uptime checks get 200 instead of 405."""
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] != "HEAD":
+            return await self.inner(scope, receive, send)
+
+        async def send_headers_only(message):
+            if message["type"] == "http.response.body":
+                if not message.get("more_body"):
+                    await send({"type": "http.response.body", "body": b""})
+                return
+            await send(message)
+        await self.inner({**scope, "method": "GET"}, receive, send_headers_only)
+
+
+app.add_middleware(HeadAsGet)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")

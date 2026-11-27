@@ -41,5 +41,61 @@ my.telegram.org and move it to `.env`.
    * MuleWatch starts with **no demo users**; add yours with `python -m app.users add`.
    * ATMLens demo accounts use the password printed in its README: change them on first sign-in.
    * Put only synthetic/demo footage in the ATMLens demo. Real CCTV evidence stays on the police unit's own PC.
-8. **Update links:** the MuleWatch README, `deploy/setup-forum-server.sh`, a test and the built dashboard mention `103.155.85.18`; change them
-   to the new forum address. Keep the old server running until step 6 passes.
+8. **Update links:** done 27 Nov 2026: no file still points at `103.155.85.18` except this page's description of the old server.
+   Keep the old server running until you've confirmed the new one (see the rollback below).
+
+## Charcha forum: operations
+
+Since 27 Nov 2026 the forum lives on **rootserver** (103.174.103.46) at **https://charcha.openhippo.in**.
+MuleWatch and ATMLens for the demo run on the **laptop** and reach the forum over the internet.
+
+| | |
+|---|---|
+| Service | `charcha` (systemd, user `apps`), uvicorn on `127.0.0.1:8100`, code in `/srv/apps/charcha/app`, data in `/srv/apps/charcha/app/data` |
+| HTTPS | OpenLiteSpeed vhost `charcha.openhippo.in` (CyberPanel) proxies to 127.0.0.1:8100; Let's Encrypt cert; Cloudflare proxy on (orange cloud) |
+| Access | Cloudflare Access app `charcha`: people use policy "Charcha demo viewers" (allowed emails); the laptop crawler uses Service Auth policy "MuleWatch laptop crawler (service token)" with token `mulewatch-laptop-crawler` (expires Nov 2027) |
+| Laptop `.env` | `FORUM_URL=https://charcha.openhippo.in`, `FORUM_HEADERS` = that token's CF-Access-Client-Id/Secret, `FORUM_MOD_TOKEN` = the same value as in `charcha.service` |
+| Search engines | every response has `X-Robots-Tag: noindex, nofollow, noarchive`; the forum's `robots.txt` says `Disallow: /` (Cloudflare's zone-wide managed robots.txt adds its own block above it) |
+
+```bash
+ssh rootserver
+systemctl status charcha                 # state
+journalctl -u charcha -f                 # live logs
+systemctl restart charcha                # restart (touches nothing else)
+curl -sI http://127.0.0.1:8100/          # 200 + x-robots-tag, from the server itself
+```
+
+**Backups.** `/usr/local/bin/charcha-backup.sh` runs every night at 02:15 UTC (`/etc/cron.d/charcha-backup`, log in
+`/var/log/charcha-backup.log`) and writes `/root/backups/charcha-nightly-<date>.db` + `-uploads.tgz`, keeping 7 days.
+Run it by hand before any risky change: `ssh rootserver /usr/local/bin/charcha-backup.sh`.
+Copy one to the laptop: `scp 'rootserver:/root/backups/charcha-nightly-*.db' ~/charcha-backups/`.
+
+**Restore a backup.**
+```bash
+ssh rootserver 'systemctl stop charcha && cp /root/backups/charcha-nightly-<date>.db /srv/apps/charcha/app/data/charcha.db \
+  && chown apps: /srv/apps/charcha/app/data/charcha.db && systemctl start charcha'
+```
+
+**Reset to the 50 seeded posts** (deletes judges' posts; take a backup first):
+```bash
+ssh rootserver '/usr/local/bin/charcha-backup.sh && systemctl stop charcha && cd /srv/apps/charcha/app \
+  && rm -f data/charcha.db && sudo -u apps ../venv/bin/python seed_forum.py && systemctl start charcha'
+```
+Then on the laptop run `./run.sh --reset` so MuleWatch forgets the old case ids.
+
+**Update the forum code** after a commit: `scp forum/forum_app.py rootserver:/root/ && ssh rootserver 'install -o apps -g apps -m 644 /root/forum_app.py /srv/apps/charcha/app/ && systemctl restart charcha'`
+(templates/static likewise, or `rsync -a --exclude data forum/ rootserver:/srv/apps/charcha/app/` then `chown -R apps: /srv/apps/charcha/app`).
+
+**Moderation token.** Kept in `/etc/systemd/system/charcha.service` and in `/srv/apps/mulewatch/.env` (the server's own MuleWatch);
+it must equal `FORUM_MOD_TOKEN` in the laptop `.env`. After changing it: `systemctl daemon-reload && systemctl restart charcha mulewatch`.
+
+**Service token.** Rotate it in Zero Trust → Access controls → Service credentials → `mulewatch-laptop-crawler` → Rotate secret,
+then put the new secret in the laptop's `FORUM_HEADERS`. If Monitored sources shows "redirected to a sign-in page", the
+token is missing, expired or not in the Access policy.
+
+**Roll back to the old server** (103.155.85.18, while it still runs):
+```bash
+cd ~/Projects/mulewatch && cp .env .env.broken-$(date +%F) && cp .env.bak-2026-11-27 .env   # then restart ./run.sh
+```
+`.env.bak-2026-11-27` has the old `FORUM_URL=http://103.155.85.18:8100` and the moderation token MuleWatch used with it
+(the old server's own token was not re-checked: ssh to it hung on 26 Nov). **Offline fallback:** `./run.sh --local-forum` runs the forum on the laptop and ignores `FORUM_HEADERS`.

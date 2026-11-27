@@ -11,7 +11,11 @@ from .imaging import image_cues
 from .ml import model
 
 GROUPS = LEXICON["groups"]
-RISK_GROUPS = {"mule_kit", "card_sale", "payout_lure", "evasion", "financial_object", "sale_intent"}
+RISK_GROUPS = {"mule_kit", "card_sale", "payout_lure", "evasion", "financial_object", "sale_intent",
+               "drug_term", "drug_emoji", "arms_term", "arms_emoji", "fake_doc", "illicit_sale_cue", "covert_cue"}
+# illegal goods other than banking material (problem statement: drugs, arms, fake documents)
+ILLICIT_TERMS = {"drug_term", "arms_term", "fake_doc"}
+ILLICIT_EMOJI = {"drug_emoji", "arms_emoji"}
 
 
 def term_multiplier(term: str, stats: dict) -> float:
@@ -34,14 +38,32 @@ def rule_engine(hits: list[dict], entities: dict, stats: dict, text_for_rules: s
     for h in hits:
         by_group.setdefault(h["group"], set()).add(h["term"])
 
+    # delivery / covert-sale words describe how goods change hands: on their own they are every shop's ad
+    # ("home delivery", "ready stock"), so they only count next to drugs, arms or documents, or (covert cues
+    # only) next to a drug or weapon emoji code
+    illicit_present = bool(ILLICIT_TERMS & set(by_group))
+    gated = set()
+    if not illicit_present:
+        gated.add("illicit_sale_cue")
+        if not ILLICIT_EMOJI & set(by_group):
+            gated.add("covert_cue")
+    # an emoji code (❄ 🍁 🔫) means something only next to the goods or a covert cue
+    if not {"drug_term", "covert_cue"} & set(by_group):
+        gated.add("drug_emoji")
+    if not {"arms_term", "covert_cue"} & set(by_group):
+        gated.add("arms_emoji")
+
     points, parts, reasons = 0.0, [], []
     for group, terms in by_group.items():
+        if group in gated or group == "lookalike":       # look-alikes only cancel the word they contain
+            continue
         spec = GROUPS[group]
         raw = sum(spec["weight"] * term_multiplier(t, stats) for t in terms)
         capped = max(raw, spec["cap"]) if spec["cap"] < 0 else min(raw, spec["cap"])
         points += capped
         parts.append({"name": spec["label"], "points": round(capped, 1), "terms": sorted(terms)})
-        if group in ("mule_kit", "card_sale", "payout_lure", "money_lure"):
+        if group in ("mule_kit", "card_sale", "payout_lure", "money_lure", "drug_term", "arms_term", "fake_doc",
+                     "drug_emoji", "arms_emoji"):
             ctx = " (quoted inside an awareness message)" if "awareness" in by_group else ""
             reasons.append(f"{spec['label']}{ctx}: " + ", ".join(f"“{t}”" for t in sorted(terms)[:5]))
         elif group == "awareness":
@@ -55,8 +77,12 @@ def rule_engine(hits: list[dict], entities: dict, stats: dict, text_for_rules: s
             reasons.append(combo["label"])
 
     strong = {"mule_kit", "card_sale", "payout_lure", "money_lure"} & set(by_group)
+    # drugs / arms / fake documents: the name alone is news or chat; with sale or delivery language it is an ad.
+    # An emoji code needs the delivery language itself (❄ or 🍁 on their own are everyday).
+    illicit_sale = bool(illicit_present and {"illicit_sale_cue", "covert_cue", "sale_intent"} & set(by_group)) or \
+        bool(ILLICIT_EMOJI & set(by_group) and "covert_cue" in by_group)
     risky_language = not awareness and bool(
-        strong or ({"financial_object", "sale_intent"} <= set(by_group))
+        strong or illicit_sale or ({"financial_object", "sale_intent"} <= set(by_group))
         or ({"financial_object", "evasion"} <= set(by_group)))
     contact = [k for k in ("phone", "phone_like", "whatsapp", "telegram", "upi", "handle") if entities.get(k)]
     if PAY_OFFER.search(text_for_rules) and ("financial_object" in by_group or "card_sale" in by_group) and not awareness:
@@ -118,11 +144,26 @@ def fraud_attempt_cues(text: str) -> list[str]:
     return list(dict.fromkeys(label for label, rx in FRAUD_ATTEMPT if rx.search(text or "")))
 
 
+def _drop_covered(hits: list[dict]) -> list[dict]:
+    """A drug / arms / document word inside a harmless phrase ("pistol" in "water pistol", "gun" in "toy gun")
+    is not that word: drop it."""
+    safe = [(h["start"], h["end"]) for h in hits if h["group"] in ("awareness", "lookalike")]
+    return [h for h in hits if not (h["group"] in ILLICIT_TERMS and any(a <= h["start"] and h["end"] <= b and (a, b) != (h["start"], h["end"])
+                                                                        for a, b in safe))]
+
+
 def categorize(by_group: set, entities: dict, score: float) -> str:
     if "fraud_attempt" in by_group and score >= 30:
         return "Reported Fraud Attempt"
     if score < 30:
         return "Benign"
+    if not by_group & {"mule_kit", "card_sale", "payout_lure"}:     # banking categories win when both appear
+        if "arms_term" in by_group or {"arms_emoji", "covert_cue"} <= by_group:
+            return "Arms Sale"
+        if "drug_term" in by_group or {"drug_emoji", "covert_cue"} <= by_group:
+            return "Drug Sale"
+        if "fake_doc" in by_group:
+            return "Fake Documents"
     if "money_lure" in by_group and not by_group & {"mule_kit", "card_sale", "payout_lure", "financial_object"}:
         return "Easy-Money Lure"
     if "card_sale" in by_group or entities.get("card_number"):
@@ -139,8 +180,8 @@ def categorize(by_group: set, entities: dict, score: float) -> str:
 def analyze(text: str, ocr_text: str = "", stats: dict | None = None, llm: dict | None = None,
             citizen: bool = False) -> dict:
     stats = stats or {}
-    text_hits = find_keywords(text)
-    ocr_hits = [dict(h, source="image") for h in find_keywords(ocr_text)] if ocr_text else []
+    text_hits = _drop_covered(find_keywords(text))
+    ocr_hits = [dict(h, source="image") for h in _drop_covered(find_keywords(ocr_text))] if ocr_text else []
     entities = extract_entities(text + ("\n" + ocr_text if ocr_text else ""))
     spans = entities.pop("_spans")
     text_spans = [s for s in spans if s["end"] <= len(text)]

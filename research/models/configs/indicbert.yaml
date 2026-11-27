@@ -1,0 +1,20 @@
+# IndicBERT v2 (Doddapaneni et al. 2023); for the original ALBERT IndicBERT use ai4bharat/indic-bert
+name: indicbert
+type: hf
+seeds: [13, 42, 2026]
+params:
+  model_name: ai4bharat/IndicBERTv2-MLM-only
+  max_length: 256
+  learning_rate: 3.0e-5
+  epochs: 5
+  batch_size: 16
+  eval_batch_size: 64
+  grad_accum: 1
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  class_weighted_loss: true
+  early_stopping_patience: 2
+  fp16: true
+cost:
+  hardware: "1x NVIDIA T4 (cloud)"
+  usd_per_hour: 0.35        # set to your GPU price

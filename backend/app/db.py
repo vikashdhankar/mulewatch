@@ -147,11 +147,31 @@ class Report(Base):
     id = Column(Integer, primary_key=True)
     post_id = Column(Integer, ForeignKey("posts.id"), index=True)
     chat_id = Column(String(40), index=True)        # needed to send the reporter updates
-    reporter_hash = Column(String(16), index=True)  # shown in the UI instead of the person
-    reporter_name = Column(String(80), default="")
+    reporter_hash = Column(String(16), index=True)  # short stable label ("Reporter 5d91c9"), also for counting people
+    reporter_name = Column(String(80), default="")  # Telegram first + last name
+    reporter_username = Column(String(64), default="")  # Telegram @username, if they have one
+    reporter_user_id = Column(String(40), default="")   # Telegram user id: stays the same if the username changes
     content_key = Column(String(32), index=True)
     origin = Column(String(200), default="")        # "forwarded from channel @x" etc.
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class Reporter(Base):
+    """A person who has used the citizen reporting bot, keyed by Telegram user id (in a private chat the
+    chat id is the same number). Holds what isn't per report: a phone number the person chose to share,
+    and whether a supervisor has blocked them for misusing the bot."""
+    __tablename__ = "reporters"
+    user_id = Column(String(40), primary_key=True)
+    username = Column(String(64), default="")
+    name = Column(String(80), default="")
+    phone = Column(String(20), default="")          # only from Telegram's "share my number" button
+    phone_at = Column(DateTime, nullable=True)
+    phone_asked_at = Column(DateTime, nullable=True)
+    blocked = Column(Boolean, default=False)
+    blocked_by = Column(String(60), default="")
+    blocked_at = Column(DateTime, nullable=True)
+    block_reason = Column(String(200), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Source(Base):
@@ -343,6 +363,78 @@ class DiscoveredChannel(Base):
     example_url = Column(String(500), default="")
     status = Column(String(12), default="suggested")    # suggested | monitored | ignored
     decided_by = Column(String(60), default="")
+
+
+# ----------------------------------------------------------------------------- real-time Telegram watcher
+# Written by the watcher process (backend/watcher), read by the command center. Only masked text and keyed
+# hashes are kept here; the raw post of a Medium/High case lives in its Post row and evidence files.
+
+class WatchChannel(Base):
+    """Per-channel polling cursor and health."""
+    __tablename__ = "watch_channels"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(80), unique=True)
+    label = Column(String(20), default="")              # discovery label (likely_fraud / likely_legit)
+    last_id = Column(Integer, default=0)                # newest message id processed
+    last_poll_at = Column(DateTime, nullable=True)
+    last_ok_at = Column(DateTime, nullable=True)
+    next_poll_at = Column(DateTime, nullable=True)
+    interval_s = Column(Integer, default=0)
+    last_post_at = Column(DateTime, nullable=True)      # publication time of the newest post seen
+    last_error = Column(String(200), default="")
+    posts_seen = Column(Integer, default=0)
+
+
+class WatchPost(Base):
+    """Every post the watcher processed (Low ones are stored only here)."""
+    __tablename__ = "watch_posts"
+    id = Column(Integer, primary_key=True)
+    uid = Column(String(120), unique=True)              # tg:<channel>:<message id>: one row per post, ever
+    channel = Column(String(80), index=True)
+    message_id = Column(Integer)
+    link = Column(String(200), default="")
+    posted_at = Column(DateTime, index=True)
+    processed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    media_type = Column(String(20), default="")
+    masked_text = Column(Text, default="")
+    masked_ocr = Column(Text, default="")
+    category = Column(String(40), index=True)
+    prob = Column(Float, default=0)
+    model = Column(String(80), default="")
+    llm = Column(JSON, default=dict)
+    cues = Column(JSON, default=list)
+    score = Column(Float, default=0, index=True)
+    breakdown = Column(JSON, default=dict)
+    route = Column(String(8), index=True)               # HIGH | MEDIUM | LOW
+    district = Column(String(40), default="", index=True)
+    ident_hashes = Column(JSON, default=list)           # ["PHONE:3f2a…", ...]
+    raw_sha256 = Column(String(64), default="")
+    post_id = Column(Integer, nullable=True, index=True)  # the command-center case (Medium/High)
+    mode = Column(String(10), default="live")           # live | replay
+
+
+class WatchIdent(Base):
+    """One identifier (keyed hash) seen in one watched post: novelty, cross-channel reuse, entity view."""
+    __tablename__ = "watch_idents"
+    id = Column(Integer, primary_key=True)
+    hash = Column(String(40), index=True)               # "<TYPE>:<hmac16>"
+    kind = Column(String(12))
+    channel = Column(String(80), index=True)
+    watch_post_id = Column(Integer, index=True)
+    seen_at = Column(DateTime, index=True)              # publication time of the post
+
+
+class AlertDecision(Base):
+    """An officer's decision on an alert: confirm | false_alarm | needs_info. Every decision is kept."""
+    __tablename__ = "alert_decisions"
+    id = Column(Integer, primary_key=True)
+    alert_id = Column(Integer, nullable=True, index=True)
+    post_id = Column(Integer, index=True)
+    decision = Column(String(16))
+    reviewer = Column(String(60), default="")
+    reviewer_id = Column(Integer, nullable=True)
+    note = Column(String(300), default="")
+    at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 def _migrate():

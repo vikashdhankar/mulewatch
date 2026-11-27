@@ -1,0 +1,7 @@
+# Only for the MuRIL / IndicBERT / XLM-R fine-tuning baselines (GPU recommended)
+-r requirements.txt
+torch>=2.2
+transformers>=4.44
+datasets>=2.20
+accelerate>=0.33
+sentencepiece>=0.2

@@ -1,0 +1,59 @@
+# Legitimate public channels as negatives (likely_legit) for the collection set: official, payments
+# awareness, market news, news and job-alert channels.
+#
+#   python -m collect.discover_channels --legit-seeds config/legit_seeds.yaml
+#
+# Each seed is looked up and its recent posts scored with the same scorer as discovery. Screening marks a
+# seed likely_legit only when the scorer agrees (score below likely_fraud). A seed in an official group
+# also needs Telegram's verified mark, because names of banks, NPCI, RBI or ministries are easy to imitate.
+# Seeds that fail either check are unclear. A seed that doesn't exist is reported and dropped.
+#
+# The usernames below are candidates, not a checked list. Every entry still goes through the review
+# spreadsheet: open https://t.me/s/<username>, confirm it is the organisation it claims to be, then mark it Y.
+#
+# Target: about 2 likely_fraud : 1 likely_legit among approved channels.
+
+official_groups: [government, payments, regulator, bank]
+
+seeds:
+  # government awareness (official: must be Telegram-verified)
+  - {username: MyGovIndia, group: government}
+  - {username: PIB_India, group: government}
+  - {username: cyberdost, group: government}
+  - {username: UIDAI, group: government}
+  # payments / UPI awareness (official)
+  - {username: NPCI_NPCI, group: payments}
+  - {username: BHIM_NPCI, group: payments}
+  # regulators and exchanges (official)
+  - {username: RBIsays, group: regulator}
+  - {username: SEBI_India, group: regulator}
+  - {username: NSEIndia, group: regulator}
+  - {username: BSEIndia, group: regulator}
+  # banks (official)
+  - {username: TheOfficialSBI, group: bank}
+  - {username: HDFC_Bank, group: bank}
+  - {username: ICICIBank, group: bank}
+  # stock-market and business news
+  - {username: moneycontrolcom, group: market_news}
+  - {username: economictimes, group: market_news}
+  - {username: ETMarkets, group: market_news}
+  - {username: livemint, group: market_news}
+  - {username: cnbctv18, group: market_news}
+  - {username: ZeeBusiness, group: market_news}
+  - {username: financialexpress, group: market_news}
+  - {username: bsindia, group: market_news}
+  - {username: NDTVProfitIndia, group: market_news}
+  - {username: businesstoday, group: market_news}
+  # Hindi / Rajasthan news
+  - {username: rajasthanpatrika, group: news}
+  - {username: dainikbhaskar, group: news}
+  - {username: firstindianews, group: news}
+  - {username: zeerajasthan, group: news}
+  # job alerts (genuine notification channels; the scorer screens out "task job" lures)
+  - {username: EmploymentNewsIndia, group: job_alert}
+  - {username: sarkariresult_com, group: job_alert}
+  - {username: freejobalert, group: job_alert}
+  - {username: RajasthanJobAlert, group: job_alert}
+  - {username: rajasthan_govt_jobs, group: job_alert}
+  - {username: RPSC_RSMSSB_Updates, group: job_alert}
+  - {username: jaipurjobs, group: job_alert}

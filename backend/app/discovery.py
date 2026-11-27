@@ -155,7 +155,9 @@ def _forum_demo(q: str) -> list[dict]:
     term = term.replace("Rajasthan", "").replace("राजस्थान", "").strip()
     words = term.split()
     phrase = " ".join(words[:2]) if len(words) > 1 else term
-    r = requests.get(FORUM_URL.rstrip("/") + "/search", params={"q": phrase}, timeout=10)
+    from .config import forum_headers
+    r = requests.get(FORUM_URL.rstrip("/") + "/search", params={"q": phrase}, timeout=10,
+                     headers=forum_headers(FORUM_URL), allow_redirects=False)
     if r.status_code != 200:
         raise SearchError(f"Forum search returned {r.status_code}")
     out = []

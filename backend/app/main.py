@@ -13,12 +13,13 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image as PILImage
 from sqlalchemy import func
 
-from . import audit, auth, bulk, crawler, discovery, evidence, llm, masking, police_api, reportbot, workflow
+from . import (audit, auth, bulk, crawler, discovery, evidence, llm, masking, police_api, reportbot, watcher_api,
+               workflow)
 from .alerts import telegram_enabled
 from .auth import can, current_user, ip_of, require
 from .config import LEVEL_RANK, MEDIA_DIR, ROOT_DIR
 from .coordination import entity_keys
-from .db import Alert, Post, Report, SessionLocal, Source, WatchItem, init_db
+from .db import Alert, Post, Report, Reporter, SessionLocal, Source, WatchItem, init_db
 from .imaging import OCR_AVAILABLE
 from .ml import model, retrain
 from .pipeline import apply_feedback, ingest, recompute_all, training_samples
@@ -39,6 +40,7 @@ app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(police_api.router)
+app.include_router(watcher_api.router)
 
 
 @app.on_event("startup")
@@ -90,12 +92,27 @@ def _attach_report_counts(s, posts):
     return posts
 
 
+def reporter_out(r: Report, who: Reporter | None = None) -> dict:
+    """Who reported it through the bot: shown to every investigator role, and each view is audited.
+    The phone number (shared by the reporter, optional) is masked below IO like other numbers."""
+    uid = r.reporter_user_id or r.chat_id or ""      # private chat id == Telegram user id (older reports)
+    username = r.reporter_username or (who.username if who else "") or ""
+    d = {"reporter": "Reporter " + r.reporter_hash[:6], "name": r.reporter_name or (who.name if who else ""),
+         "username": username, "user_id": uid, "profile": f"https://t.me/{username}" if username else ""}
+    if who:
+        d |= {"phone": who.phone or "", "blocked": bool(who.blocked), "block_reason": who.block_reason or "",
+              "blocked_by": who.blocked_by or "", "blocked_at": who.blocked_at.isoformat() if who.blocked_at else None}
+    return d
+
+
 def detail(s, p: Post) -> dict:
     _attach_report_counts(s, [p])
     reps = s.query(Report).filter_by(post_id=p.id).order_by(Report.id).all() if p.id else []
     d = summary(p)
-    d["citizen_reports"] = [{"reporter": "Reporter " + r.reporter_hash[:6], "origin": r.origin,
-                             "at": r.created_at.isoformat()} for r in reps]
+    whos = {w.user_id: w for w in s.query(Reporter).filter(
+        Reporter.user_id.in_({r.reporter_user_id or r.chat_id for r in reps}))} if reps else {}
+    d["citizen_reports"] = [reporter_out(r, whos.get(r.reporter_user_id or r.chat_id))
+                            | {"origin": r.origin, "at": r.created_at.isoformat()} for r in reps]
     rel_ids = [r["id"] for r in p.related or []]
     rel = {x.id: x for x in s.query(Post).filter(Post.id.in_(rel_ids)).all()} if rel_ids else {}
     d.update({
@@ -176,6 +193,9 @@ def get_post(pid: int, request: Request, u=Depends(current_user)):
             raise HTTPException(404)
         out = masking.apply(detail(s, p), u)
     _log_view(u, pid, ip_of(request))
+    if out.get("citizen_reports"):
+        audit.log(u, "reporters.viewed", case_id=pid, ip=ip_of(request),
+                  detail={"reporters": [r["username"] or r["user_id"] or r["reporter"] for r in out["citizen_reports"]]})
     return out
 
 
@@ -451,8 +471,10 @@ def alerts(limit: int = 50, u=Depends(current_user)):
     with SessionLocal() as s:
         rows = s.query(Alert).order_by(Alert.id.desc()).limit(limit).all()
         posts = {p.id: p for p in s.query(Post).filter(Post.id.in_([a.post_id for a in rows])).all()}
+        dec = watcher_api._latest_decisions(s, list(posts))
         return [{"id": a.id, "post_id": a.post_id, "level": a.level, "reason": a.reason, "seen": a.seen,
                  "channel": a.channel, "delivered": a.delivered, "created_at": a.created_at.isoformat(),
+                 "decision": watcher_api._decision_dict(dec.get(a.post_id)),
                  "post": masking.apply(summary(posts[a.post_id]), u) if a.post_id in posts else None} for a in rows]
 
 
@@ -589,8 +611,35 @@ def bot_status(u=Depends(current_user)):
             "recent": [{"post_id": p.id, "risk_level": p.risk_level, "risk_score": p.risk_score,
                         "excerpt": masking.mask_text((p.text or p.ocr_text or "")[:120]) if not can(u, "IO")
                         else (p.text or p.ocr_text or "")[:120], "origin": r.origin,
-                        "at": r.created_at.isoformat()} for r, p in recent],
+                        "at": r.created_at.isoformat()} | {"by": reporter_out(r)} for r, p in recent],
         }
+
+
+@app.post("/api/reporters/{uid}/block")
+def block_reporter(uid: str, request: Request, reason: str = Body("", embed=True), u=Depends(require("SUPERVISOR"))):
+    """Stop a Telegram account from filing reports (spam, abuse, illegal content). Its earlier reports stay."""
+    with SessionLocal() as s:
+        if not s.get(Reporter, uid) and not s.query(Report).filter(
+                (Report.reporter_user_id == uid) | (Report.chat_id == uid)).first():
+            raise HTTPException(404, "No reporter with that Telegram ID")
+        r = s.get(Reporter, uid) or Reporter(user_id=uid)
+        r.blocked, r.blocked_by, r.blocked_at, r.block_reason = True, u.username, datetime.utcnow(), reason.strip()[:200]
+        s.merge(r)
+        s.commit()
+    audit.log(u, "reporter.blocked", ip=ip_of(request), detail={"telegram_user_id": uid, "reason": reason.strip()[:200]})
+    return {"user_id": uid, "blocked": True}
+
+
+@app.delete("/api/reporters/{uid}/block")
+def unblock_reporter(uid: str, request: Request, u=Depends(require("SUPERVISOR"))):
+    with SessionLocal() as s:
+        r = s.get(Reporter, uid)
+        if not r:
+            raise HTTPException(404, "No reporter with that Telegram ID")
+        r.blocked, r.blocked_by, r.blocked_at, r.block_reason = False, "", None, ""
+        s.commit()
+    audit.log(u, "reporter.unblocked", ip=ip_of(request), detail={"telegram_user_id": uid})
+    return {"user_id": uid, "blocked": False}
 
 
 @app.delete("/api/bot/alerts")

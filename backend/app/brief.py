@@ -54,7 +54,8 @@ T = {
 STATUS_HI = {"NEW": "नया", "VERIFIED": "सत्यापित", "NOTICE_DRAFTED": "सूचना प्रारूप", "NOTICE_SENT": "सूचना भेजी",
              "CONTENT_REMOVED": "सामग्री हटी", "FIR_LINKED": "एफ.आई.आर. से जुड़ा", "CLOSED_NO_ACTION": "बंद"}
 # same wording as the command center's Hindi interface (frontend/scripts/hi_source.py)
-CATEGORY_HI = {"Mule Account Sale": "म्यूल खाता बिक्री", "Account-Holder Recruitment": "खाताधारकों की भर्ती",
+CATEGORY_HI = {"Drug Sale": "नशीले पदार्थों की बिक्री", "Arms Sale": "अवैध हथियार बिक्री",
+               "Fake Documents": "फर्जी दस्तावेज़", "Mule Account Sale": "म्यूल खाता बिक्री", "Account-Holder Recruitment": "खाताधारकों की भर्ती",
                "Card Sale": "कार्ड बिक्री", "KYC Fraud": "केवाईसी धोखाधड़ी", "Easy-Money Lure": "आसान कमाई का लालच",
                "Reported Fraud Attempt": "धोखाधड़ी के प्रयास की रिपोर्ट", "Suspicious Financial Ad": "संदिग्ध वित्तीय विज्ञापन",
                "Benign": "सामान्य"}

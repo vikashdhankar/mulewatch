@@ -92,25 +92,26 @@ def passbook(name, overlay):
 
 def main():
     # --- scam posters ------------------------------------------------------------
-    p = poster("kit_poster.png", [
+    # "_v2": these posters now carry +91 0... demo numbers; a new name gets past caches holding the old images
+    p = poster("kit_poster_v2.png", [
         ("ALL BANK", 64, "fg"), ("CURRENT ACCOUNT", 76, "accent"), ("FULL KIT AVAILABLE", 64, "fg"),
         ("", 30, "fg"),
         ("ATM + PASSBOOK + CHEQUE BOOK", 40, "fg"), ("NET BANKING + SIM", 40, "fg"),
         ("KYC DONE  ·  HIGH LIMIT", 40, "accent"), ("", 30, "fg"),
         ("Gaming / P2P / Trading OK", 38, "fg"), ("", 30, "fg"),
-        ("Telegram: t.me/kitwala_jpr", 42, "accent"), ("Call 98290 41736", 42, "fg"),
+        ("Telegram: t.me/kitwala_jpr", 42, "accent"), ("Call +91 01290 41736", 42, "fg"),
     ], bg=(12, 12, 14), fg=(245, 245, 245), accent=(255, 204, 0))
     # edited repost of the same poster (cropped + tinted) -> perceptual-hash match
     p2 = p.crop((20, 20, 880, 1080)).resize((900, 1100))
     tint = Image.new("RGB", p2.size, (40, 0, 0))
-    Image.blend(p2, tint, 0.12).save(OUT / "kit_poster_repost.jpg", quality=80)
+    Image.blend(p2, tint, 0.12).save(OUT / "kit_poster_repost_v2.jpg", quality=80)
 
-    poster("earn_poster.png", [
+    poster("earn_poster_v2.png", [
         ("EARN ₹30,000 / MONTH", 66, "accent"), ("", 20, "fg"),
         ("Bas apna bank account", 52, "fg"), ("kiraye pe do!", 60, "fg"), ("", 30, "fg"),
         ("✓ Ghar baithe income", 40, "fg"), ("✓ Students & housewives welcome", 36, "fg"),
         ("✓ 100% safe, no risk", 40, "fg"), ("", 30, "fg"),
-        ("WhatsApp 70148 25519", 48, "accent"),
+        ("WhatsApp +91 01148 25519", 48, "accent"),
     ], bg=(0, 92, 64), fg=(255, 255, 255), accent=(255, 230, 90))
 
     poster("usdt_poster.png", [

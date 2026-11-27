@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { api, can, caseId, ROLE_LABEL, timeAgo } from "./api";
+import { api, can, caseId, roleLabel, timeAgo } from "./api";
 import { useAuth } from "./auth";
 import { LangSwitch, T, useT } from "./i18n";
 import Bulk from "./pages/Bulk";
+import ImportPosts from "./pages/ImportPosts";
 import { Icon, RiskBadge } from "./components/ui";
 import { useLive } from "./live";
 import Analyze from "./pages/Analyze";
@@ -19,17 +20,20 @@ import Officers from "./pages/Officers";
 import Profile from "./pages/Profile";
 import Sources from "./pages/Sources";
 import Discovery from "./pages/Discovery";
+import Watcher from "./pages/Watcher";
 import Watchlist from "./pages/Watchlist";
 
 // [path, label, icon, minimum role]
 const NAV = [
   ["/", "Command center", "radar", "ANALYST"],
   ["/cases", "Cases", "cases", "ANALYST"],
+  ["/watcher", "Telegram watcher", "bell", "ANALYST"],
   ["/network", "Seller network", "graph", "ANALYST"],
   ["/map", "District map", "map", "ANALYST"],
   ["/complaints", "Victim complaints", "file", "IO"],
   ["/analyze", "Check a post", "scan", "ANALYST"],
   ["/bulk", "Bulk link check", "list", "ANALYST"],
+  ["/import", "Import dataset", "download", "ANALYST"],
   ["/discovery", "Internet discovery", "search", "ANALYST"],
   ["/watchlist", "Watchlist", "eye", "ANALYST"],
   ["/sources", "Monitored sources", "globe", "ANALYST"],
@@ -99,7 +103,7 @@ function UserMenu() {
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="avatar">{initials}</span>
-        <span className="user-txt"><b>{me.name || me.username}</b><small>{t(ROLE_LABEL[me.role])}</small></span>
+        <span className="user-txt"><b>{me.name || me.username}</b><small>{t(roleLabel(me))}</small></span>
       </button>
       {open && (
         <div className="user-pop" role="menu">
@@ -165,6 +169,7 @@ export default function App() {
             <Route path="/map" element={<MapPage />} />
             <Route path="/complaints" element={<Complaints />} />
             <Route path="/analyze" element={<Analyze />} />
+            <Route path="/watcher" element={<Watcher />} />
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/sources" element={<Sources />} />
             <Route path="/brief" element={<Brief />} />
@@ -174,6 +179,8 @@ export default function App() {
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/bulk" element={<Bulk />} />
             <Route path="/bulk/:id" element={<Bulk />} />
+            <Route path="/import" element={<ImportPosts />} />
+            <Route path="/import/:id" element={<ImportPosts />} />
             <Route path="*" element={<p>{t("Page not found.")} <Link to="/">{t("Back to the command center")}</Link></p>} />
           </Routes>
         </main>

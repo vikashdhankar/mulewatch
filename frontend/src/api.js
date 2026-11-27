@@ -69,6 +69,18 @@ export const api = {
   analyzeUrl: (url, save) => req("/api/analyze/url", json("POST", { url, save })),
   graph: (params = {}) => req("/api/graph?" + qs(params)),
   alerts: () => req("/api/alerts"),
+  decideAlert: (id, decision, note = "") => req(`/api/alerts/${id}/decision`, json("POST", { decision, note })),
+  decideQueue: (pid, decision, note = "") => req(`/api/watcher/queue/${pid}/decision`, json("POST", { decision, note })),
+  evidencePdf: (id) => download(`/api/posts/${id}/evidence-pack.pdf`),
+
+  // real-time Telegram watcher
+  watcherHealth: () => req("/api/watcher/health"),
+  watcherPause: (paused) => req("/api/watcher/pause", json("POST", { paused })),
+  watcherAlerts: (params = {}) => req("/api/watcher/alerts?" + qs(params)),
+  watcherEntities: () => req("/api/watcher/entities"),
+  watcherEntity: (hash) => req(`/api/watcher/entities/${encodeURIComponent(hash)}`),
+  watcherBursts: (channel) => req("/api/watcher/bursts?" + qs({ channel })),
+  watcherExport: () => req("/api/watcher/feedback/export", { method: "POST" }),
   alertsSeen: () => req("/api/alerts/seen", { method: "POST" }),
 
   // complaints, map, audit, brief
@@ -97,6 +109,12 @@ export const api = {
   bulkJob: (id) => req(`/api/bulk/${id}`),
   bulkCreate: (text, label) => req("/api/bulk", json("POST", { text, label })),
   bulkUpload: (file, label) => { const f = new FormData(); f.append("file", file); f.append("label", label || ""); return req("/api/bulk/upload", { method: "POST", body: f }); },
+  // dataset import (posts)
+  importUpload: (file) => { const f = new FormData(); f.append("file", file); return req("/api/import/upload", { method: "POST", body: f }); },
+  importStart: (body) => req("/api/import/start", json("POST", body)),
+  importJobs: () => req("/api/import/jobs"),
+  importJob: (id) => req(`/api/import/jobs/${id}`),
+  importCancel: (id) => req(`/api/import/jobs/${id}/cancel`, { method: "POST" }),
   bulkCancel: (id) => req(`/api/bulk/${id}/cancel`, { method: "POST" }),
 
   // monitoring
@@ -109,10 +127,16 @@ export const api = {
   crawl: () => req("/api/crawl", { method: "POST" }),
   bot: () => req("/api/bot"),
   unlinkAlerts: () => req("/api/bot/alerts", { method: "DELETE" }),
+  blockReporter: (uid, reason) => req(`/api/reporters/${encodeURIComponent(uid)}/block`, json("POST", { reason })),
+  unblockReporter: (uid) => req(`/api/reporters/${encodeURIComponent(uid)}/block`, { method: "DELETE" }),
 };
 
 export const LEVELS = ["Critical", "High", "Medium", "Low"];
 export const ROLE_LABEL = { ANALYST: "Analyst", IO: "Investigating Officer", SUPERVISOR: "Supervisor" };
+// Display only: a Supervisor whose designation is Superintendent of Police is shown as "Super Admin (SP)".
+// The role, its rank and its permissions stay SUPERVISOR.
+export const roleLabel = (u) =>
+  u?.role === "SUPERVISOR" && /superintendent of police/i.test(u.designation || "") ? "Super Admin (SP)" : ROLE_LABEL[u?.role];
 export const STATUS = {
   NEW: "New", VERIFIED: "Verified", NOTICE_DRAFTED: "Notice drafted", NOTICE_SENT: "Notice sent",
   CONTENT_REMOVED: "Content removed", FIR_LINKED: "Linked to FIR", CLOSED_NO_ACTION: "Closed – no action",

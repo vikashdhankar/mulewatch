@@ -18,7 +18,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from .config import MEDIA_DIR
+from .config import MEDIA_DIR, forum_headers
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/126.0 Safari/537.36 MuleWatch/1.0",
@@ -74,7 +74,8 @@ def _get(url: str, max_bytes: int, accept_image_only=False):
     for _ in range(5):
         _check_host(url)
         try:
-            r = requests.get(url, headers=UA, timeout=12, stream=True, allow_redirects=False)
+            r = requests.get(url, headers={**UA, **forum_headers(url)}, timeout=12, stream=True,
+                             allow_redirects=False)
         except requests.RequestException as e:
             raise FetchError(f"Couldn't open the page: {type(e).__name__}")
         if r.is_redirect or r.status_code in (301, 302, 303, 307, 308):

@@ -308,7 +308,9 @@ mark { color: inherit; border-radius: 3px; padding: 0 1px; }
 .bot-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .bot-body { flex: 1; min-width: 260px; }
 .bot-recent { margin-top: 12px; border-top: 1px solid var(--line-2); padding-top: 6px; }
-.cit-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 5px 0; border-bottom: 1px solid var(--line-2); }
+.block-form { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.block-form input { flex: 1; min-width: 0; }
+.cit-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 5px 0; border-bottom: 1px solid var(--line-2); }
 .linkish { border: 0; background: none; color: var(--indigo); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
 .code-big { font-size: 15px; background: var(--indigo-soft); color: #1f2a7a; padding: 2px 8px; border-radius: 6px; font-weight: 600; white-space: nowrap; }
 
@@ -447,6 +449,7 @@ code.shared { background: var(--crit-soft); color: #a5162a; padding: 0 5px; bord
 .map-tbl { max-height: 420px; overflow: auto; margin-bottom: 12px; }
 .map-tbl .ex { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .import-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.check-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .import-row label { flex: 1; min-width: 180px; }
 .imp-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-2); }
 
@@ -527,3 +530,9 @@ td.nowrap, .nowrap { white-space: nowrap; }
 .disc-add label:first-child { flex: 2 1 260px; }
 .disc-q { white-space: normal; word-break: break-word; font-size: 12.5px; }
 tr.muted td { opacity: .55; }
+
+/* Telegram watcher: decisions on alerts */
+.decision-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.decision-btns .btn.on:not(.btn-confirm):not(.btn-fp) { background: #b7791f; border-color: #b7791f; color: #fff; }
+.post-row .row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.post-row .ring-ids { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }

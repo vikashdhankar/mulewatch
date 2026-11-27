@@ -18,7 +18,7 @@ from datetime import datetime
 
 from .coordination import IGNORE_DOMAINS
 from .db import Complaint, ComplaintIdent, ComplaintImport
-from .extract import extract_entities
+from .extract import extract_entities, is_demo_phone
 from .security import decrypt, encrypt, ident_digest
 
 FIELDS = {
@@ -137,7 +137,7 @@ def norm_values(field: str, raw: str) -> list[tuple[str, str]]:
     if field == "phone":
         for tok in re.split(r"[,;/|\n]+", raw):
             d = re.sub(r"\D", "", tok)
-            if len(d) >= 10 and d[-10] in "6789":
+            if (len(d) >= 10 and d[-10] in "6789") or is_demo_phone(d):
                 out.append(("phone", "+91" + d[-10:]))
     elif field == "upi":
         out += [("upi", m.lower()) for m in re.findall(r"[A-Za-z0-9][A-Za-z0-9.\-_]{1,60}@[A-Za-z]{2,20}", raw)]

@@ -15,11 +15,11 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 
-from .config import MEDIA_DIR
+from .config import MEDIA_DIR, forum_headers
 from .db import Post, SessionLocal, Source
 from .pipeline import ingest
 
@@ -37,7 +37,10 @@ def status():
 
 
 def _get(url, **kw):
-    return requests.get(url, headers=UA, timeout=8, **kw)
+    extra = forum_headers(url)
+    if extra:       # requests keeps custom headers across redirects: never carry the forum's secret elsewhere
+        kw.setdefault("allow_redirects", False)
+    return requests.get(url, headers={**UA, **extra}, timeout=8, **kw)
 
 
 def _download_image(url: str, name: str) -> str:
@@ -90,6 +93,9 @@ def crawl_forum(session, src: Source) -> int:
     base = src.url.rstrip("/")
     listing = _get(base + "/new")
     listing.raise_for_status()
+    if listing.is_redirect or urlparse(listing.url).hostname != urlparse(base).hostname:
+        raise RuntimeError(f"redirected to a sign-in page at {urlparse(listing.url).hostname} "
+                           "(Cloudflare Access?): set FORUM_HEADERS in .env")
     cards = _forum_cards(listing.text)
     known = {p.remote_id for p in session.query(Post.remote_id).filter(Post.source == "forum").all()}
     new = 0
@@ -178,6 +184,19 @@ def crawl_telegram(session, src: Source) -> int:
 # ----------------------------------------------------------------------------- single page
 
 PAGE_INTERVAL = float(os.getenv("PAGE_INTERVAL", "60"))
+# Telegram channels are polled in turn, not all every cycle: at most TELEGRAM_PER_CYCLE channels per crawl
+# cycle (about 20 requests a minute at the default 3 s cycle, the research collector's pace), and each one
+# at most every TELEGRAM_INTERVAL seconds. Many channels then never slow down the forum or flood t.me.
+TELEGRAM_INTERVAL = float(os.getenv("TELEGRAM_INTERVAL", "300"))
+TELEGRAM_PER_CYCLE = int(os.getenv("TELEGRAM_PER_CYCLE", "1"))
+
+
+def _due_telegram(sources: list, now: datetime) -> set:
+    """Ids of the Telegram sources to poll this cycle: never-polled first, then the longest-waiting."""
+    due = [x for x in sources if x.kind == "telegram"
+           and (not x.last_crawl or now - x.last_crawl >= timedelta(seconds=TELEGRAM_INTERVAL))]
+    due.sort(key=lambda x: x.last_crawl or datetime.min)
+    return {x.id for x in due[:TELEGRAM_PER_CYCLE]}
 
 
 def crawl_page(session, src: Source) -> int:
@@ -206,10 +225,14 @@ def crawl_once() -> int:
     from .pipeline import recompute_all
     total, backfill = 0, False
     with SessionLocal() as s:
-        for src in s.query(Source).filter_by(enabled=True).all():
+        enabled = s.query(Source).filter_by(enabled=True).all()
+        tg_due = _due_telegram(enabled, datetime.utcnow())
+        for src in enabled:
             if src.kind == "page" and src.last_crawl and \
                     datetime.utcnow() - src.last_crawl < timedelta(seconds=PAGE_INTERVAL):
                 continue            # single pages are polled gently, not every few seconds
+            if src.kind == "telegram" and src.id not in tg_due:
+                continue
             if src.items_seen == 0 and src.kind != "page":
                 backfill = True     # first crawl of a source: don't spam Telegram with old posts
             try:
@@ -270,11 +293,14 @@ def request_takedown(post: Post) -> tuple[bool, str]:
             return False, "This post is no longer on the forum (the forum was reset), so there is nothing to take down."
         if len(parts) > 3 and parts[3].startswith("c"):          # a single comment
             r = requests.post(f"{base}/api/moderation/flag-comment/{parts[3][1:]}",
-                              headers={"X-Mod-Token": MOD_TOKEN, **UA},
-                              json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6)
-            return r.ok, ("Comment hidden on the forum." if r.ok else r.text[:200])
-        r = requests.post(f"{base}/api/moderation/flag/{pid}", headers={"X-Mod-Token": MOD_TOKEN, **UA},
-                          json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6)
-        return r.ok, r.text[:200]
+                              headers={"X-Mod-Token": MOD_TOKEN, **UA, **forum_headers(base)},
+                              json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6,
+                              allow_redirects=False)
+            return r.status_code < 300, ("Comment hidden on the forum." if r.ok else r.text[:200])
+        r = requests.post(f"{base}/api/moderation/flag/{pid}",
+                          headers={"X-Mod-Token": MOD_TOKEN, **UA, **forum_headers(base)},
+                          json={"case": f"MW-{post.id:05d}", "reason": post.category}, timeout=6,
+                          allow_redirects=False)
+        return r.status_code < 300, r.text[:200] or f"forum answered {r.status_code}"
     except requests.RequestException as e:
         return False, str(e)

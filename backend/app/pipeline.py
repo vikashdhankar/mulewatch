@@ -1,5 +1,6 @@
 """Ingestion pipeline: OCR -> extraction -> scoring -> coordination -> alerts."""
 import hashlib
+import re
 from collections import defaultdict
 from datetime import datetime
 
@@ -13,6 +14,10 @@ from .extract import detect_language
 from .imaging import ocr_image, phash
 from .ml import retrain
 from .scoring import analyze, categorize, finalize
+
+# Cases created by the real-time Telegram watcher (backend/watcher). The watcher scores them with its own model
+# and owns their alerts, so the rescoring below keeps its score, level and category and never re-alerts them.
+WATCHER_SOURCE = "watcher"
 
 
 def keyword_stats(session) -> dict:
@@ -42,8 +47,10 @@ def _apply_analysis(post: Post, a: dict):
 def ingest(session, *, text: str = "", platform: str = "unknown", author: str = "", url: str = "",
            image_path: str = "", posted_at: datetime | None = None, source: str = "manual",
            ocr_hint: str = "", use_llm: bool = False, train_label: int | None = None,
-           recompute: bool = True, extra_images: list[str] | None = None, html: str = "") -> Post:
-    ocr_text, ph = "", ""
+           recompute: bool = True, extra_images: list[str] | None = None, html: str = "",
+           ocr_text: str = "") -> Post:
+    """ocr_text: text already read from the post's image elsewhere (no image file is kept)."""
+    ph = ""
     if image_path:
         full = str(MEDIA_DIR / image_path)
         ocr_text = ocr_image(full) or ocr_hint
@@ -132,18 +139,24 @@ def recompute_all(session, alert: bool = True, push: bool = True):
             if back:
                 p.repost_of = min(back)
                 reappeared.append(p)
-        final = finalize(base, boost, hits)
+        watched = p.source == WATCHER_SOURCE
+        final = float(p.scores.get("base", p.risk_score or 0)) if watched else finalize(base, boost, hits)
         if p.complaint_count:
             final = max(final, 90.0)
         if p.repost_of is not None:
             final = max(final, 85.0)
+        if watched:
+            # the watcher's level stands unless a complaint match or reappearance raised the score
+            if final > float(p.scores.get("base", 0)):
+                p.risk_level = level_for(final)
+        else:
+            p.risk_level = level_for(final)
+            p.category = categorize(set(p.scores.get("groups", [])), p.entities or {}, final)
         p.risk_score = final
-        p.risk_level = level_for(final)
-        p.category = categorize(set(p.scores.get("groups", [])), p.entities or {}, final)
         p.scores = dict(p.scores, ring_boost=boost, watchlist=hits, final=final, final_done=True,
                         ring_platforms=platforms, complaints=complaints.describe(p),
                         repost=(f"Reappeared after takedown of MW-{p.repost_of:05d}" if p.repost_of else ""))
-        if alert:
+        if alert and not watched:
             a = maybe_alert(session, p, hits, previous_level=prev, push_allowed=push)
             if a is not None:
                 fresh[p.id] = a
@@ -161,6 +174,8 @@ def recompute_all(session, alert: bool = True, push: bool = True):
                 notify(session, p, complaints.describe(p) + ". Open the case to see the complaints.", push=push)
         for p in reappeared:
             why = next((r["why"] for r in p.related or [] if r["id"] == p.repost_of), [])
+            if p.source == WATCHER_SOURCE:      # watcher alerts reach Telegram without identifier values
+                why = list(dict.fromkeys(re.sub(r"^(shared \w+).*", r"\1", w) for w in why))
             notify(session, p, f"Reappeared after takedown: linked to MW-{p.repost_of:05d} (removed) by "
                                + (", ".join(why[:2]) or "shared identifiers"), push=push)
     session.commit()
@@ -173,6 +188,8 @@ def rescore_all(session, alert: bool = False):
     stats = keyword_stats(session)
     for p in session.query(Post).all():
         p.jurisdiction = jurisdiction.suggest(p)
+        if p.source == WATCHER_SOURCE:
+            continue
         llm_res = p.llm if p.llm and "score" in p.llm else None
         a = analyze(p.text or "", p.ocr_text or "", stats, llm_res, citizen=p.source == "citizen")
         extra = [r for r in (p.reasons or []) if r.startswith(("Posted as a comment", "Citizen report:", "Officer's note with the link:"))]

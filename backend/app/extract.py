@@ -79,7 +79,7 @@ RX = {
     "email": re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+\.[A-Za-z0-9.\-]{2,}\b"),
     "upi": re.compile(r"(?<![\w.\-@])([A-Za-z0-9][A-Za-z0-9.\-_]{1,60}@[A-Za-z]{2,15})(?![\w.@])"),
     "handle": re.compile(r"(?<![\w@./])@([A-Za-z][A-Za-z0-9_]{4,31})\b"),
-    # Indian mobile: 10 digits starting 6-9, any single space/dot/dash grouping (98290 41736, 8875 93 6612)
+    # Indian mobile: 10 digits starting 6-9, any single space/dot/dash grouping (92000 41736, 9200 93 6612)
     "phone": re.compile(r"(?<![\d])(?:\+?91[\s\-.]?|0)?[6-9](?:[\s\-.]?\d){9}(?![\d])"),
     "ifsc": re.compile(r"\b([A-Z]{4}0[A-Z0-9]{6})\b"),
     "card_number": re.compile(r"(?<!\d)((?:\d{4}[\s\-]?){3}\d{4}|(?:\d{4}[\s\-]?){2}[Xx*]{4}[\s\-]?\d{4}|(?:[Xx*]{4}[\s\-]?){3}\d{4})(?!\d)"),
@@ -111,6 +111,16 @@ def _luhn_ok(num: str) -> bool:
             d = d * 2 - 9 if d * 2 > 9 else d * 2
         total += d
     return total % 10 == 0
+
+
+# Demo numbers: "+91 0XXXX XXXXX". No Indian national number starts with 0 (that is the trunk prefix), so a
+# number written this way can never belong to a real subscriber. All made-up data in this project uses them.
+DEMO_PHONE = re.compile(r"(?<![\d])\+?91[\s\-.]?0(?:[\s\-.]?\d){9}(?![\d])")
+
+
+def is_demo_phone(p: str) -> bool:
+    d = re.sub(r"\D", "", p or "")
+    return len(d) == 12 and d.startswith("910")
 
 
 def _norm_phone(p: str) -> str:
@@ -179,6 +189,9 @@ def extract_entities(text: str) -> dict:
             add("bank_account", digits, m, 1)
             consumed.append((m.start(1), m.end(1)))
     for m in RX["phone"].finditer(text):
+        if free(m):
+            add("phone", _norm_phone(m.group(0)), m)
+    for m in DEMO_PHONE.finditer(text):
         if free(m):
             add("phone", _norm_phone(m.group(0)), m)
     for m in RX["phone_like"].finditer(text):

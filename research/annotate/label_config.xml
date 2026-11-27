@@ -1,0 +1,38 @@
+<View>
+  <Header value="Post (identifiers are already masked)"/>
+  <Labels name="spans" toName="text">
+    <Label value="price" background="#f59e0b" hint="an amount asked or offered (Rs 25,000, 2k, ₹1500 daily)"/>
+    <Label value="bank" background="#3b82f6" hint="a bank or payment app named (SBI, HDFC, Paytm)"/>
+    <Label value="account_type" background="#8b5cf6" hint="kind of account or kit (current account, corporate kit, savings, firm account)"/>
+    <Label value="contact" background="#ef4444" hint="how to reach the poster ([PHONE], [HANDLE], [URL], 'DM me', 'WhatsApp karo')"/>
+    <Label value="upi" background="#10b981" hint="a UPI ID placeholder [UPI] or words asking for UPI payment"/>
+  </Labels>
+  <Text name="text" value="$text" granularity="word"/>
+  <Header value="Text read from the image (OCR)" size="5"/>
+  <Labels name="ocr_spans" toName="ocr_text">
+    <Label value="price" background="#f59e0b" hint="an amount asked or offered (Rs 25,000, 2k, ₹1500 daily)"/>
+    <Label value="bank" background="#3b82f6" hint="a bank or payment app named (SBI, HDFC, Paytm)"/>
+    <Label value="account_type" background="#8b5cf6" hint="kind of account or kit (current account, corporate kit, savings, firm account)"/>
+    <Label value="contact" background="#ef4444" hint="how to reach the poster ([PHONE], [HANDLE], [URL], 'DM me', 'WhatsApp karo')"/>
+    <Label value="upi" background="#10b981" hint="a UPI ID placeholder [UPI] or words asking for UPI payment"/>
+  </Labels>
+  <Text name="ocr_text" value="$ocr_text" granularity="word"/>
+  <Header value="Class"/>
+  <Choices name="label" toName="text" choice="single-radio" required="true" showInline="false">
+    <Choice value="mule_account_sale" hint="Sells or rents bank accounts, current/savings accounts or full kits"/>
+    <Choice value="account_holder_recruitment" hint="Recruits people to hand over or 'rent' their own account for commission"/>
+    <Choice value="card_sale" hint="Sells ATM, debit or credit cards or card details"/>
+    <Choice value="kyc_fraud" hint="Offers fake KYC, rented identity documents or accounts opened on someone else's papers"/>
+    <Choice value="easy_money_lure" hint="Easy-money / task / part-time job offer that leads to account misuse"/>
+    <Choice value="awareness" hint="Warns about, reports on or explains mule-account fraud"/>
+    <Choice value="benign" hint="Unrelated, or a legitimate financial post"/>
+  </Choices>
+  <Header value="Language (pre-filled, correct it if wrong)" size="5"/>
+  <Choices name="language" toName="text" choice="single" showInline="true">
+    <Choice value="en"/>
+    <Choice value="hi"/>
+    <Choice value="hinglish"/>
+    <Choice value="mixed"/>
+  </Choices>
+  <TextArea name="notes" toName="text" maxSubmissions="1" rows="2" placeholder="Optional: why this was hard to label"/>
+</View>

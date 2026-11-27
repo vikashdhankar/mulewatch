@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { caseId, inr, STATUS, timeAgo } from "../api";
+import { api, caseId, inr, STATUS, timeAgo } from "../api";
 import { useT } from "../i18n";
 
 export function Icon({ name, size = 18 }) {
@@ -68,12 +69,17 @@ export function ScoreMeter({ score, level, size = 120 }) {
 const GROUP_CLASS = {
   mule_kit: "hl-strong", card_sale: "hl-strong", payout_lure: "hl-strong",
   evasion: "hl-warn", financial_object: "hl-soft", sale_intent: "hl-soft", awareness: "hl-good",
+  drug_term: "hl-strong", arms_term: "hl-strong", fake_doc: "hl-strong", drug_emoji: "hl-warn", arms_emoji: "hl-warn",
+  covert_cue: "hl-warn", illicit_sale_cue: "hl-soft", lookalike: "hl-good",
 };
 const PRIORITY = { "hl-strong": 5, "hl-ent": 4, "hl-warn": 3, "hl-good": 2, "hl-soft": 1 };
 const GROUP_LABEL = {
   mule_kit: "Mule-account sale language", card_sale: "Card sale", payout_lure: "Recruiting account holders",
   evasion: "KYC evasion / trust cue", financial_object: "Financial instrument", sale_intent: "Sale / rent intent",
   awareness: "Awareness context (lowers risk)",
+  drug_term: "Drug name or slang", arms_term: "Illegal arms language", fake_doc: "Fake document offer",
+  drug_emoji: "Drug emoji code", arms_emoji: "Weapon emoji", covert_cue: "Covert-sale cue (discreet, no police, no licence)",
+  illicit_sale_cue: "Sale / delivery language", lookalike: "Harmless look-alike (toy, sport)",
 };
 
 export { GROUP_CLASS, GROUP_LABEL };
@@ -137,6 +143,8 @@ export function Entities({ entities = {}, onWatch, watched = new Set() }) {
           <dd>{vals.map((v) => (
             <span key={v} className="ent">
               <code>{v}</code>
+              {(k === "phone" || k === "whatsapp") && String(v).replace(/\s/g, "").startsWith("+910") &&
+                <span className="small muted" title={t("Numbers starting +91 0 cannot belong to anyone; the demo data uses them")}> {t("demo number")}</span>}
               {onWatch && WATCHABLE.has(k) && !String(v).includes("•") && (
                 watched.has(String(v).toLowerCase())
                   ? <span className="ent-watched" title={t("On watchlist")}><Icon name="eye" size={14} /></span>
@@ -226,4 +234,30 @@ export function Modal({ title, onClose, children, wide }) {
 
 export function Empty({ title, children }) {
   return <div className="empty"><strong>{title}</strong>{children && <p>{children}</p>}</div>;
+}
+
+const DECISIONS = [["confirm", "Confirm", "btn-confirm"], ["false_alarm", "False alarm", "btn-fp"], ["needs_info", "Needs info", ""]];
+
+/** Confirm / False alarm / Needs info on an alert (alertId) or on a review-queue case without an alert (postId).
+    Every click is stored with the reviewer and time; the latest one is highlighted. */
+export function DecisionButtons({ alertId, postId, current, onDone }) {
+  const { t } = useT();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const decide = async (d) => {
+    setBusy(true); setErr("");
+    try {
+      const r = alertId ? await api.decideAlert(alertId, d) : await api.decideQueue(postId, d);
+      onDone && onDone(r);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <span className="decision-btns">
+      {DECISIONS.map(([d, label, cls]) => (
+        <button key={d} type="button" disabled={busy} aria-pressed={current === d}
+          className={`btn btn-sm ${cls}${current === d ? " on" : ""}`}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); decide(d); }}>{t(label)}</button>))}
+      {err && <span className="err small">{err}</span>}
+    </span>
+  );
 }

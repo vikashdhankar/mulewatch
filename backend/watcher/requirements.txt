@@ -1,0 +1,5 @@
+# Real-time Telegram watcher, on top of backend/requirements.txt
+telethon>=1.36
+pyyaml>=6.0
+python-dotenv>=1.0
+scikit-learn>=1.4

@@ -16,3 +16,4 @@ openpyxl>=3.1
 uharfbuzz>=0.39
 # optional: full-page screenshots of High/Critical cases as evidence
 #   pip install playwright && playwright install chromium
+pyyaml>=6.0

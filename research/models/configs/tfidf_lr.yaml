@@ -1,0 +1,14 @@
+name: tfidf_lr
+type: tfidf_lr
+seeds: [13]                 # deterministic
+params:
+  word_ngrams: [1, 2]
+  char_ngrams: [2, 5]       # character n-grams catch acc0unt, a.t.m, mixed script
+  min_df: 2
+  max_char_features: 200000
+  C: 4.0
+  class_weight: balanced
+  max_iter: 2000
+cost:
+  hardware: "laptop CPU"
+  usd_per_hour: 0.05        # set to your hardware or cloud price; used for USD per 1k posts

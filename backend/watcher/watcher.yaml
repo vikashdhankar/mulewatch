@@ -1,0 +1,88 @@
+# Real-time Telegram watcher. Paths are relative to the repository root.
+# Override any value in a copy outside git and point WATCHER_CONFIG at it.
+
+paused: false                 # true: the watcher keeps running but polls nothing (also switchable in the
+                              # command center, Monitored sources -> Telegram watcher)
+
+channels_file: research/config/channels.discovered.yaml   # only entries with approved: true are watched
+research_dir: research
+
+telegram:
+  session: research/store/telegram_watcher.session   # its own login; the research session stays free
+  requests_per_minute: 20     # all channels together: history requests and image downloads
+  flood_sleep_threshold_s: 60 # FloodWaits up to this are slept through; longer ones pause every channel
+  interval_active_s: 120      # channels that posted within active_window_h
+  interval_quiet_s: 900
+  active_window_h: 6
+  batch_limit: 100            # most messages read from one channel per poll
+  first_poll_backfill: 10     # newest posts processed when a channel is first watched (no Telegram push)
+
+ocr:
+  enabled: true
+  lang: hin+eng
+  max_image_bytes: 3000000    # bigger images are not downloaded
+
+classifier:
+  # best saved research model (research/results/runs + research/checkpoints); if there is none, a TF-IDF + LR
+  # model is trained once on whatever labelled data exists and cached in backend/data/watcher/
+  prefer_saved_model: true
+  fallback_cache: backend/data/watcher/fallback_tfidf_lr.pkl
+  # research label scheme (research/common/labels.py) -> watcher category
+  class_map:
+    mule_account_sale: account_sale
+    card_sale: account_sale
+    kyc_fraud: account_sale
+    account_holder_recruitment: payout_mule
+    easy_money_lure: task_job_scam
+    awareness: unrelated
+    benign: unrelated
+  # watcher category -> research class, for exporting confirmed alerts as labelled data (null: no class yet)
+  research_label:
+    account_sale: mule_account_sale
+    payout_mule: account_holder_recruitment
+    task_job_scam: easy_money_lure
+    usdt_p2p: null
+    crypto_investment_scam: null
+  false_alarm_label: benign
+  max_cues: 6
+
+llm:
+  enabled: true               # second opinion only when gray_low <= p <= gray_high
+  config: research/models/configs/llm_zeroshot.yaml   # endpoint and model; local only unless allow_remote
+  gray_low: 0.35
+  gray_high: 0.75
+  weight: 0.5                 # p := (1 - weight) * p + weight * p_llm
+  p_fraud: 0.9                # p_llm when the LLM names a fraud class
+  p_not_fraud: 0.1
+  timeout_s: 20
+  cooldown_s: 300             # after a failed call, skip the LLM for this long
+
+risk:
+  weights:
+    model: 60                 # 60 * p * severity(category)
+    new_identifier: 15        # an identifier hash never seen before
+    rajasthan_place: 10       # a Rajasthan district / town is named
+    burst: 10                 # channel's posts in the last hour > burst_factor x its 7-day hourly mean
+    cross_channel: 5          # an identifier of the post appears in >= cross_channel_min channels
+  severity:
+    payout_mule: 1.0
+    account_sale: 1.0
+    usdt_p2p: 0.7
+    crypto_investment_scam: 0.9
+    task_job_scam: 0.9
+    legit_finance: 0.0
+    unrelated: 0.0
+  burst_factor: 3
+  burst_min_posts: 3          # fewer posts than this in the last hour is never a burst
+  cross_channel_min: 3
+  thresholds:
+    high: 70                  # >= high: alert + Telegram to the duty officer chat
+    medium: 40                # >= medium: review queue; below: stored only
+
+alerts:
+  telegram: true              # push HIGH alerts to the chat linked in the command center (TELEGRAM_CHAT_ID or /alerts)
+  max_text_chars: 280
+  push_max_age_h: 24          # older posts (catching up after downtime) alert on the dashboard only
+
+replay:
+  max_gap_s: 5                # longest wait between two replayed posts, whatever --speed says
