@@ -184,6 +184,19 @@ def crawl_telegram(session, src: Source) -> int:
 # ----------------------------------------------------------------------------- single page
 
 PAGE_INTERVAL = float(os.getenv("PAGE_INTERVAL", "60"))
+# Telegram channels are polled in turn, not all every cycle: at most TELEGRAM_PER_CYCLE channels per crawl
+# cycle (about 20 requests a minute at the default 3 s cycle, the research collector's pace), and each one
+# at most every TELEGRAM_INTERVAL seconds. Many channels then never slow down the forum or flood t.me.
+TELEGRAM_INTERVAL = float(os.getenv("TELEGRAM_INTERVAL", "300"))
+TELEGRAM_PER_CYCLE = int(os.getenv("TELEGRAM_PER_CYCLE", "1"))
+
+
+def _due_telegram(sources: list, now: datetime) -> set:
+    """Ids of the Telegram sources to poll this cycle: never-polled first, then the longest-waiting."""
+    due = [x for x in sources if x.kind == "telegram"
+           and (not x.last_crawl or now - x.last_crawl >= timedelta(seconds=TELEGRAM_INTERVAL))]
+    due.sort(key=lambda x: x.last_crawl or datetime.min)
+    return {x.id for x in due[:TELEGRAM_PER_CYCLE]}
 
 
 def crawl_page(session, src: Source) -> int:
@@ -212,10 +225,14 @@ def crawl_once() -> int:
     from .pipeline import recompute_all
     total, backfill = 0, False
     with SessionLocal() as s:
-        for src in s.query(Source).filter_by(enabled=True).all():
+        enabled = s.query(Source).filter_by(enabled=True).all()
+        tg_due = _due_telegram(enabled, datetime.utcnow())
+        for src in enabled:
             if src.kind == "page" and src.last_crawl and \
                     datetime.utcnow() - src.last_crawl < timedelta(seconds=PAGE_INTERVAL):
                 continue            # single pages are polled gently, not every few seconds
+            if src.kind == "telegram" and src.id not in tg_due:
+                continue
             if src.items_seen == 0 and src.kind != "page":
                 backfill = True     # first crawl of a source: don't spam Telegram with old posts
             try:
