@@ -416,6 +416,8 @@ def _loop():
             if offset is not None:
                 params["offset"] = offset
             updates = tg.call("getUpdates", http_timeout=35, **params)
+            if not _status["running"]:
+                _status["last_error"] = ""      # recovered: don't keep showing the polling error that stopped it
             _status["running"], backoff = True, 2
             for u in updates:
                 offset = u["update_id"] + 1
