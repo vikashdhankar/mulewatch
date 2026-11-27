@@ -82,7 +82,7 @@ rm -rf "$MW_DATA_DIR"
 ./run.sh
 ```
 
-Open http://localhost:8000/watcher and sign in with the **analyst** demo account (shown on the sign-in
+Open http://localhost:8000/watcher (or the port `./run.sh` prints: on the demo laptop port 8000 is taken, so it is 8001) and sign in with the **analyst** demo account (shown on the sign-in
 page). The watcher page always shows posts masked (`[PHONE]`, `[UPI]`). Case pages show the post as
 collected: the analyst account sees phone and account numbers partly hidden, but **UPI IDs in full**. On a
 projector, stay on the watcher page or open case pages with care.
