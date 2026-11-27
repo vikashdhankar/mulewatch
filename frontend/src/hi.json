@@ -876,5 +876,8 @@
 "Weapon emoji": "हथियार इमोजी",
 "Covert-sale cue (discreet, no police, no licence)": "छुपी बिक्री का संकेत (गुप्त पैकिंग, पुलिस का डर नहीं, बिना लाइसेंस)",
 "Sale / delivery language": "बिक्री / डिलीवरी की भाषा",
-"Harmless look-alike (toy, sport)": "हानिरहित मिलता-जुलता शब्द (खिलौना, खेल)"
+"Harmless look-alike (toy, sport)": "हानिरहित मिलता-जुलता शब्द (खिलौना, खेल)",
+"Telegram ID {id}": "टेलीग्राम आईडी {id}",
+"Opening this page is recorded in the audit log, because it shows who reported.": "यह पेज खोलना ऑडिट लॉग में दर्ज होता है, क्योंकि इसमें रिपोर्ट करने वाले की पहचान दिखती है।",
+"Reporters get a verdict with safety advice in English and Hindi, and a message when investigators confirm, dismiss or take down what they reported. Their Telegram name and username are shown on the case page.": "रिपोर्ट करने वालों को अंग्रेज़ी और हिंदी में सुरक्षा सलाह के साथ नतीजा मिलता है, और जब जाँचकर्ता उनकी रिपोर्ट की पुष्टि करते हैं, उसे खारिज करते हैं या हटवाते हैं तो संदेश भी। उनका टेलीग्राम नाम और यूज़रनेम केस पेज पर दिखता है।"
 }

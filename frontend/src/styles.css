@@ -308,7 +308,7 @@ mark { color: inherit; border-radius: 3px; padding: 0 1px; }
 .bot-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .bot-body { flex: 1; min-width: 260px; }
 .bot-recent { margin-top: 12px; border-top: 1px solid var(--line-2); padding-top: 6px; }
-.cit-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 5px 0; border-bottom: 1px solid var(--line-2); }
+.cit-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 5px 0; border-bottom: 1px solid var(--line-2); }
 .linkish { border: 0; background: none; color: var(--indigo); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
 .code-big { font-size: 15px; background: var(--indigo-soft); color: #1f2a7a; padding: 2px 8px; border-radius: 6px; font-weight: 600; white-space: nowrap; }
 

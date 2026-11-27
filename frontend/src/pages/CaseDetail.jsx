@@ -138,9 +138,13 @@ export default function CaseDetail() {
           {p.citizen_reports?.length > 0 && (
             <section className="panel">
               <div className="panel-head"><h2>{t("Citizen reports ({n})", { n: p.citizen_reports.length })}</h2></div>
-              <p className="small muted">{t("Reported through the Telegram bot. Reporters are told when you confirm, dismiss or take this down.")}</p>
+              <p className="small muted">{t("Reported through the Telegram bot. Reporters are told when you confirm, dismiss or take this down.")} {t("Opening this page is recorded in the audit log, because it shows who reported.")}</p>
               {p.citizen_reports.map((r, i) => (
-                <div key={i} className="cit-row"><b>{r.reporter}</b><span>{r.origin}</span><span className="muted small">{timeAgo(r.at)}</span></div>
+                <div key={i} className="cit-row">
+                  <div><b>{r.name || r.reporter}</b>
+                    {r.username && <> · <a href={r.profile} target="_blank" rel="noreferrer">@{r.username}</a></>}
+                    <div className="muted small">{r.user_id ? t("Telegram ID {id}", { id: r.user_id }) : r.reporter}</div></div>
+                  <span>{r.origin}</span><span className="muted small">{timeAgo(r.at)}</span></div>
               ))}
             </section>
           )}

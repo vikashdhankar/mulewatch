@@ -89,9 +89,11 @@ WELCOME = (
     "• <b>forward</b> the message or post,\n"
     "• send a <b>link</b> to it, or\n"
     "• send a <b>screenshot</b>.\n\n"
-    "I'll check it in a few seconds and pass it to investigators. Your identity is not shown to anyone.\n\n"
+    "I'll check it in a few seconds and pass it to investigators. Police investigators handling your report "
+    "can see your Telegram name and username; nobody else can.\n\n"
     "🇮🇳 बैंक खाता, एटीएम कार्ड या \"किट\" बेचने/किराये पर लेने का कोई संदेश दिखे तो उसे यहाँ फ़ॉरवर्ड करें, "
-    "लिंक या स्क्रीनशॉट भेजें। हम तुरंत जाँच करेंगे।\n\n"
+    "लिंक या स्क्रीनशॉट भेजें। हम तुरंत जाँच करेंगे। आपका टेलीग्राम नाम और यूज़रनेम केवल जाँच करने वाले "
+    "पुलिस अधिकारी देख सकते हैं।\n\n"
     "Commands: /status — your recent reports · /help\n"
     "Lost money? Call <b>1930</b> or report at cybercrime.gov.in"
 )
@@ -304,7 +306,10 @@ def handle_update(update: dict, tg) -> None:
     norm = re.sub(r"\s+", " ", re.sub(r"\d", "0", text.lower())).strip()
     key = hashlib.sha1(f"{norm}|{image_hash}".encode()).hexdigest()[:32]
     rhash = _reporter_hash(chat_id)
-    name = (msg.get("from") or {}).get("first_name", "")[:80]
+    sender = msg.get("from") or {}
+    name = " ".join(x for x in (sender.get("first_name"), sender.get("last_name")) if x)[:80]
+    who = {"reporter_name": name, "reporter_username": (sender.get("username") or "")[:64],
+           "reporter_user_id": str(sender.get("id") or "")[:40]}
 
     with SessionLocal() as s:
         prev = s.query(Report).filter_by(content_key=key).order_by(Report.id).first()
@@ -314,8 +319,12 @@ def handle_update(update: dict, tg) -> None:
             post = ingest(s, text=text, platform=platform[:60], author=author, url=url, image_path=image_path,
                           extra_images=extra_images, posted_at=posted_at, source="citizen", use_llm=True)
             post.reasons = (post.reasons or []) + [f"Citizen report: {origin}" + (" (link opened)" if how else "")]
-        if not s.query(Report).filter_by(post_id=post.id, reporter_hash=rhash).first():
-            s.add(Report(post_id=post.id, chat_id=str(chat_id), reporter_hash=rhash, reporter_name=name,
+        mine = s.query(Report).filter_by(post_id=post.id, reporter_hash=rhash).first()
+        if mine:
+            for k, v in who.items():         # keep the name and username current (people change them)
+                setattr(mine, k, v)
+        else:
+            s.add(Report(post_id=post.id, chat_id=str(chat_id), reporter_hash=rhash, **who,
                          content_key=key, origin=origin[:200]))
         s.commit()
         count = s.query(Report).filter_by(post_id=post.id).count()

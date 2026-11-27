@@ -92,12 +92,18 @@ def _attach_report_counts(s, posts):
     return posts
 
 
+def reporter_out(r: Report) -> dict:
+    """Who reported it through the bot: shown to every investigator role, and each view is audited."""
+    return {"reporter": "Reporter " + r.reporter_hash[:6], "name": r.reporter_name or "",
+            "username": r.reporter_username or "", "user_id": r.reporter_user_id or "",
+            "profile": f"https://t.me/{r.reporter_username}" if r.reporter_username else ""}
+
+
 def detail(s, p: Post) -> dict:
     _attach_report_counts(s, [p])
     reps = s.query(Report).filter_by(post_id=p.id).order_by(Report.id).all() if p.id else []
     d = summary(p)
-    d["citizen_reports"] = [{"reporter": "Reporter " + r.reporter_hash[:6], "origin": r.origin,
-                             "at": r.created_at.isoformat()} for r in reps]
+    d["citizen_reports"] = [reporter_out(r) | {"origin": r.origin, "at": r.created_at.isoformat()} for r in reps]
     rel_ids = [r["id"] for r in p.related or []]
     rel = {x.id: x for x in s.query(Post).filter(Post.id.in_(rel_ids)).all()} if rel_ids else {}
     d.update({
@@ -178,6 +184,9 @@ def get_post(pid: int, request: Request, u=Depends(current_user)):
             raise HTTPException(404)
         out = masking.apply(detail(s, p), u)
     _log_view(u, pid, ip_of(request))
+    if out.get("citizen_reports"):
+        audit.log(u, "reporters.viewed", case_id=pid, ip=ip_of(request),
+                  detail={"reporters": [r["username"] or r["user_id"] or r["reporter"] for r in out["citizen_reports"]]})
     return out
 
 
@@ -593,7 +602,7 @@ def bot_status(u=Depends(current_user)):
             "recent": [{"post_id": p.id, "risk_level": p.risk_level, "risk_score": p.risk_score,
                         "excerpt": masking.mask_text((p.text or p.ocr_text or "")[:120]) if not can(u, "IO")
                         else (p.text or p.ocr_text or "")[:120], "origin": r.origin,
-                        "at": r.created_at.isoformat()} for r, p in recent],
+                        "at": r.created_at.isoformat()} | {"by": reporter_out(r)} for r, p in recent],
         }
 
 

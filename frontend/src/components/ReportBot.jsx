@@ -91,7 +91,7 @@ export function BotPanel() {
                 : <>{t("Off. A supervisor can link the unit's alert chat. For your own case alerts, use")} <Link to="/profile">{t("My account")}</Link>.</>}
             </dd>
           </dl>
-          <p className="muted small">{t("Reporters get a verdict with safety advice in English and Hindi, and a message when investigators confirm, dismiss or take down what they reported. Their identity isn't shown here.")}</p>
+          <p className="muted small">{t("Reporters get a verdict with safety advice in English and Hindi, and a message when investigators confirm, dismiss or take down what they reported. Their Telegram name and username are shown on the case page.")}</p>
         </div>
       </div>
       {bot.recent?.length > 0 && (
@@ -99,7 +99,7 @@ export function BotPanel() {
           {bot.recent.map((r, i) => (
             <Link key={i} to={`/case/${r.post_id}`} className="alert-row">
               <RiskBadge level={r.risk_level} score={r.risk_score} />
-              <div><strong>{caseId(r.post_id)}</strong> <span className="muted small">{timeAgo(r.at)} · {r.origin}</span>
+              <div><strong>{caseId(r.post_id)}</strong> <span className="muted small">{timeAgo(r.at)} · {r.by?.username ? `@${r.by.username}` : (r.by?.name || r.by?.reporter)} · {r.origin}</span>
                 <div className="small">{r.excerpt}</div></div>
             </Link>
           ))}

@@ -147,8 +147,10 @@ class Report(Base):
     id = Column(Integer, primary_key=True)
     post_id = Column(Integer, ForeignKey("posts.id"), index=True)
     chat_id = Column(String(40), index=True)        # needed to send the reporter updates
-    reporter_hash = Column(String(16), index=True)  # shown in the UI instead of the person
-    reporter_name = Column(String(80), default="")
+    reporter_hash = Column(String(16), index=True)  # short stable label ("Reporter 5d91c9"), also for counting people
+    reporter_name = Column(String(80), default="")  # Telegram first + last name
+    reporter_username = Column(String(64), default="")  # Telegram @username, if they have one
+    reporter_user_id = Column(String(40), default="")   # Telegram user id: stays the same if the username changes
     content_key = Column(String(32), index=True)
     origin = Column(String(200), default="")        # "forwarded from channel @x" etc.
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

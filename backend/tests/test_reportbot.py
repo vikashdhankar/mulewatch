@@ -125,3 +125,31 @@ def test_startup_rescore_upgrades_old_citizen_reports():
         p = s.get(Post, p.id)
         assert p.category == "Reported Fraud Attempt" and p.risk_level in ("High", "Critical")
         assert s.query(Alert).filter_by(post_id=p.id).count() == 1
+
+
+def test_reporter_identity_is_stored_and_shown_to_analyst_with_audit():
+    import json
+    from fastapi.testclient import TestClient
+    from app import auth
+    from app.db import AuditLog
+    from app.main import app
+    auth.ensure_demo_users()
+    tg = FakeTG()
+    ad = "Bank khata kiraye pe do, 30k monthly, ATM + passbook bhejo. WhatsApp +91 01148 25519"
+    u = upd(303, ad)
+    u["message"]["from"] = {"id": 7000000303, "first_name": "Ravi", "last_name": "Demo", "username": "ravi_demo_reporter"}
+    reportbot.handle_update(u, tg)
+    assert "investigators" in reportbot.WELCOME and "username" in reportbot.WELCOME
+    with SessionLocal() as s:
+        r = s.query(Report).filter_by(reporter_username="ravi_demo_reporter").one()
+        assert r.reporter_user_id == "7000000303" and r.reporter_name == "Ravi Demo"
+        pid = r.post_id
+    c = TestClient(app)
+    assert c.post("/api/auth/login", json={"username": "analyst", "password": auth.DEMO_PASSWORD}).status_code == 200
+    rep = [x for x in c.get(f"/api/posts/{pid}").json()["citizen_reports"] if x["username"] == "ravi_demo_reporter"][0]
+    assert rep["user_id"] == "7000000303" and rep["name"] == "Ravi Demo"          # not masked for analysts
+    assert rep["profile"] == "https://t.me/ravi_demo_reporter"
+    with SessionLocal() as s:
+        a = s.query(AuditLog).filter_by(action="reporters.viewed", case_id=pid).order_by(AuditLog.id.desc()).first()
+        assert a is not None and "ravi_demo_reporter" in json.dumps(a.detail)
+    assert any(x["by"]["username"] == "ravi_demo_reporter" for x in c.get("/api/bot").json()["recent"])

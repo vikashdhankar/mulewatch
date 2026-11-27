@@ -130,7 +130,7 @@ One bot does both jobs.
 * Replies in seconds with the risk level, the reasons, the phone/UPI/Telegram details it found, whether it's linked to a known seller ring, and safety advice in English and Hindi (with 1930 / cybercrime.gov.in).
 * Files each report as a case tagged *reported by N citizens*; the same ad reported by several people is grouped on one case. A forwarded channel's `t.me/<name>` becomes an identifier, so it links into seller rings.
 * When an investigator clicks **Confirm fraud**, **False positive** or **Request takedown**, everyone who reported that case gets a message.
-* `/status` shows a person their last 5 reports; reporters appear only as an anonymous ID in the command center; 30 reports per person per hour (`REPORTS_PER_HOUR`).
+* `/status` shows a person their last 5 reports; investigators see each reporter's Telegram name, @username and user ID on the case page (every view is in the audit log), and the bot tells reporters so; 30 reports per person per hour (`REPORTS_PER_HOUR`).
 * Works from the laptop (long polling), no public URL needed. Only one copy of MuleWatch can run per bot token.
 
 ### Optional: AI analyst
