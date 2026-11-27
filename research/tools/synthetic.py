@@ -52,7 +52,9 @@ T = {
 
 def make(n: int, channels: int, sellers: int, seed: int):
     rng = random.Random(seed)
-    sell = [{"phone": f"9{rng.randint(100000000, 999999999)}",
+    # 9200 series: a real mobile format (the redactor must see one) but not in the allotment table, so not
+    # random people's numbers (see README "Synthetic data only")
+    sell = [{"phone": f"9200{rng.randint(100000, 999999)}",
              "upi": f"seller{i}{rng.choice(['', '.k', '_77'])}@{rng.choice(['ybl', 'paytm', 'okaxis', 'ibl'])}",
              "handle": f"@kits_dealer_{i}"} for i in range(sellers)]
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
