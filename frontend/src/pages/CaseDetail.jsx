@@ -10,6 +10,40 @@ import { useLive } from "../live";
 
 const LANG_NAME = { en: "English", hi: "Hindi", hinglish: "Hinglish" };
 
+function CitizenReport({ r, canBlock, reload }) {
+  const { t } = useT();
+  const [form, setForm] = useState(false);
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState("");
+  const act = async (fn) => {
+    setErr("");
+    try { await fn(); setForm(false); setReason(""); await reload(); } catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="cit-row">
+      <div><b>{r.name || r.reporter}</b>
+        {r.username ? <> · <a href={r.profile} target="_blank" rel="noreferrer">@{r.username}</a></>
+          : <span className="muted small"> · {t("no Telegram username")}</span>}
+        {r.blocked && <> <span className="chip chip-td" title={r.block_reason}>{t("Blocked")}</span></>}
+        <div className="muted small">{r.user_id ? t("Telegram ID {id}", { id: r.user_id }) : r.reporter}</div>
+        <div className="muted small">{r.phone ? <>📱 {r.phone}</> : t("Phone not shared")}</div>
+        {r.blocked && <div className="small err">{t("Blocked by {who}", { who: r.blocked_by })}{r.block_reason ? `: ${r.block_reason}` : ""}</div>}
+        {canBlock && r.user_id && (r.blocked
+          ? <button className="linkish small" onClick={() => act(() => api.unblockReporter(r.user_id))}>{t("Unblock reporter")}</button>
+          : form
+            ? <div className="block-form">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("Reason (spam, abuse, illegal content…)")} aria-label={t("Reason")} />
+                <button className="btn btn-confirm on" disabled={!reason.trim()} onClick={() => act(() => api.blockReporter(r.user_id, reason))}>{t("Block")}</button>
+                <button className="linkish small" onClick={() => setForm(false)}>{t("Cancel")}</button>
+              </div>
+            : <button className="linkish small" onClick={() => setForm(true)}>{t("Block reporter")}</button>)}
+        {err && <div className="small err">{err}</div>}
+      </div>
+      <span>{r.origin}</span><span className="muted small">{timeAgo(r.at)}</span>
+    </div>
+  );
+}
+
 export function Evidence({ p, onWatch, watched }) {
   const { t } = useT();
   const imageMatches = (p.matches || []).filter((m) => m.source === "image");
@@ -140,11 +174,7 @@ export default function CaseDetail() {
               <div className="panel-head"><h2>{t("Citizen reports ({n})", { n: p.citizen_reports.length })}</h2></div>
               <p className="small muted">{t("Reported through the Telegram bot. Reporters are told when you confirm, dismiss or take this down.")} {t("Opening this page is recorded in the audit log, because it shows who reported.")}</p>
               {p.citizen_reports.map((r, i) => (
-                <div key={i} className="cit-row">
-                  <div><b>{r.name || r.reporter}</b>
-                    {r.username && <> · <a href={r.profile} target="_blank" rel="noreferrer">@{r.username}</a></>}
-                    <div className="muted small">{r.user_id ? t("Telegram ID {id}", { id: r.user_id }) : r.reporter}</div></div>
-                  <span>{r.origin}</span><span className="muted small">{timeAgo(r.at)}</span></div>
+                <CitizenReport key={i} r={r} canBlock={can(me, "SUPERVISOR")} reload={() => api.post(id).then(setP)} />
               ))}
             </section>
           )}

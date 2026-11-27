@@ -156,6 +156,24 @@ class Report(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class Reporter(Base):
+    """A person who has used the citizen reporting bot, keyed by Telegram user id (in a private chat the
+    chat id is the same number). Holds what isn't per report: a phone number the person chose to share,
+    and whether a supervisor has blocked them for misusing the bot."""
+    __tablename__ = "reporters"
+    user_id = Column(String(40), primary_key=True)
+    username = Column(String(64), default="")
+    name = Column(String(80), default="")
+    phone = Column(String(20), default="")          # only from Telegram's "share my number" button
+    phone_at = Column(DateTime, nullable=True)
+    phone_asked_at = Column(DateTime, nullable=True)
+    blocked = Column(Boolean, default=False)
+    blocked_by = Column(String(60), default="")
+    blocked_at = Column(DateTime, nullable=True)
+    block_reason = Column(String(200), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Source(Base):
     """A monitored website / channel."""
     __tablename__ = "sources"

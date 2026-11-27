@@ -19,7 +19,10 @@ class FakeTG:
     def __init__(self):
         self.sent = []
 
-    def send(self, chat_id, text, reply_to=None):
+    def send(self, chat_id, text, reply_to=None, markup=None):
+        if text == reportbot.ASK_PHONE:              # the optional phone question, kept apart from replies
+            self.asks = getattr(self, "asks", []) + [(chat_id, markup)]
+            return
         self.sent.append((chat_id, text))
 
     def typing(self, chat_id):
@@ -153,3 +156,61 @@ def test_reporter_identity_is_stored_and_shown_to_analyst_with_audit():
         a = s.query(AuditLog).filter_by(action="reporters.viewed", case_id=pid).order_by(AuditLog.id.desc()).first()
         assert a is not None and "ravi_demo_reporter" in json.dumps(a.detail)
     assert any(x["by"]["username"] == "ravi_demo_reporter" for x in c.get("/api/bot").json()["recent"])
+
+
+
+def test_phone_is_optional_own_number_only_and_blocking_stops_reports():
+    from fastapi.testclient import TestClient
+    from app import auth
+    from app.db import AuditLog, Reporter
+    from app.main import app
+    auth.ensure_demo_users()
+    tg = FakeTG()
+    who = {"id": 7000000404, "first_name": "Meena", "username": "meena_demo"}
+
+    def send(**m):
+        u = upd(7000000404, m.pop("text", None), **m)
+        u["message"]["from"] = who
+        reportbot.handle_update(u, tg)
+
+    send(text="Current account kit for sale, ATM + passbook + SIM, 18k. WhatsApp +91 01148 25520")
+    assert "MW-" in tg.sent[-1][1]
+    assert tg.asks == [(7000000404, reportbot.PHONE_KB)]             # asked once, after the verdict
+    send(text="Savings account on rent, 25k per month, passbook + ATM. Telegram @kit_rent_demo")
+    assert "MW-" in tg.sent[-1][1] and len(tg.asks) == 1             # not asked again the same day
+
+    send(text=reportbot.SKIP_BTN)                                     # the button text is not filed as a report
+    assert "keep reporting" in tg.sent[-1][1]
+    send(contact={"phone_number": "919200011223", "user_id": 7000000999, "first_name": "Someone else"})
+    assert "your own" in tg.sent[-1][1]
+    send(contact={"phone_number": "919200011223", "user_id": 7000000404, "first_name": "Meena"})
+    with SessionLocal() as s:
+        assert s.get(Reporter, "7000000404").phone == "+919200011223"
+        pid = s.query(Report).filter_by(reporter_user_id="7000000404").first().post_id
+
+    c = TestClient(app)
+    c.post("/api/auth/login", json={"username": "analyst", "password": auth.DEMO_PASSWORD})
+    r = [x for x in c.get(f"/api/posts/{pid}").json()["citizen_reports"] if x["user_id"] == "7000000404"][0]
+    assert r["phone"] != "+919200011223" and r["username"] == "meena_demo"          # masked for analysts
+    assert c.post("/api/reporters/7000000404/block", json={"reason": "spam"}).status_code == 403
+    c.post("/api/auth/login", json={"username": "io", "password": auth.DEMO_PASSWORD})
+    r = [x for x in c.get(f"/api/posts/{pid}").json()["citizen_reports"] if x["user_id"] == "7000000404"][0]
+    assert r["phone"] == "+919200011223"
+    assert c.post("/api/reporters/7000000404/block", json={"reason": "spam"}).status_code == 403
+
+    c.post("/api/auth/login", json={"username": "sho", "password": auth.DEMO_PASSWORD})
+    assert c.post("/api/reporters/7000000404/block", json={"reason": "spam and abuse"}).status_code == 200
+    with SessionLocal() as s:
+        before = s.query(Report).count()
+    send(text="Another kit for sale, 20k, ATM + passbook, call +91 01148 25521")
+    send(text="/start")
+    with SessionLocal() as s:
+        assert s.query(Report).count() == before                      # nothing filed while blocked
+        assert s.query(AuditLog).filter_by(action="reporter.blocked").count() >= 1
+    assert tg.sent[-1][1] == reportbot.BLOCKED
+    r = [x for x in c.get(f"/api/posts/{pid}").json()["citizen_reports"] if x["user_id"] == "7000000404"][0]
+    assert r["blocked"] and r["blocked_by"] == "sho" and r["block_reason"] == "spam and abuse"
+    assert c.delete("/api/reporters/7000000404/block").status_code == 200
+    send(text="Another kit for sale, 20k, ATM + passbook, call +91 01148 25521")
+    with SessionLocal() as s:
+        assert s.query(Report).count() == before + 1

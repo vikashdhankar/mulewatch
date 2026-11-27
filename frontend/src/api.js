@@ -127,6 +127,8 @@ export const api = {
   crawl: () => req("/api/crawl", { method: "POST" }),
   bot: () => req("/api/bot"),
   unlinkAlerts: () => req("/api/bot/alerts", { method: "DELETE" }),
+  blockReporter: (uid, reason) => req(`/api/reporters/${encodeURIComponent(uid)}/block`, json("POST", { reason })),
+  unblockReporter: (uid) => req(`/api/reporters/${encodeURIComponent(uid)}/block`, { method: "DELETE" }),
 };
 
 export const LEVELS = ["Critical", "High", "Medium", "Low"];

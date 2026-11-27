@@ -23,7 +23,7 @@ from datetime import datetime
 import requests
 
 from .config import MEDIA_DIR, REPORT_BOT_TOKEN, REPORTS_PER_HOUR
-from .db import Post, Report, SessionLocal
+from .db import Post, Report, Reporter, SessionLocal
 
 MAX_FILE = 8 * 1024 * 1024
 URL_RX = re.compile(r"(?:https?://|www\.|t\.me/)\S+", re.I)
@@ -55,8 +55,10 @@ class TelegramAPI:
             raise RuntimeError(d.get("description", f"{method} failed"))
         return d["result"]
 
-    def send(self, chat_id, text: str, reply_to=None):
+    def send(self, chat_id, text: str, reply_to=None, markup=None):
         params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+        if markup:
+            params["reply_markup"] = markup
         if reply_to:
             params["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
         try:
@@ -90,11 +92,14 @@ WELCOME = (
     "• send a <b>link</b> to it, or\n"
     "• send a <b>screenshot</b>.\n\n"
     "I'll check it in a few seconds and pass it to investigators. Police investigators handling your report "
-    "can see your Telegram name and username; nobody else can.\n\n"
+    "can see your Telegram name, username and account ID; nobody else can.\n\n"
+    "⚠️ Use this bot only to report suspicious messages. False reports, spam, abusive or illegal content are "
+    "recorded against your Telegram account; officers can block it and act on it under law.\n\n"
     "🇮🇳 बैंक खाता, एटीएम कार्ड या \"किट\" बेचने/किराये पर लेने का कोई संदेश दिखे तो उसे यहाँ फ़ॉरवर्ड करें, "
     "लिंक या स्क्रीनशॉट भेजें। हम तुरंत जाँच करेंगे। आपका टेलीग्राम नाम और यूज़रनेम केवल जाँच करने वाले "
-    "पुलिस अधिकारी देख सकते हैं।\n\n"
-    "Commands: /status — your recent reports · /help\n"
+    "पुलिस अधिकारी देख सकते हैं। झूठी रिपोर्ट, स्पैम या गैरकानूनी सामग्री भेजने पर आपका खाता ब्लॉक किया जा "
+    "सकता है और कानूनी कार्रवाई हो सकती है।\n\n"
+    "Commands: /status — your recent reports · /phone — share your number · /help\n"
     "Lost money? Call <b>1930</b> or report at cybercrime.gov.in"
 )
 
@@ -104,6 +109,7 @@ HELP = (
     "2. I reply with a risk level and the reasons.\n"
     "3. Investigators review it; I'll message you if they act on it.\n\n"
     "/status shows your last 5 reports.\n"
+    "/phone lets you share your mobile number with investigators, so they can call you back. It's optional.\n"
     "Never share your OTP, PIN, ATM card or bank account with anyone. Renting out your account is a crime "
     "(you become a money mule).\n"
     "पैसे गँवाए हैं? तुरंत <b>1930</b> पर कॉल करें या cybercrime.gov.in पर शिकायत करें।"
@@ -186,6 +192,59 @@ UPDATE_TEXT = {
 }
 
 
+# ----------------------------------------------------------------------------- reporters
+
+SHARE_BTN = "📱 Share my number"
+SKIP_BTN = "Not now"
+ASK_PHONE = ("Would you like to share your mobile number with the investigators? They may need to call you "
+             "about this report. It's optional: you can keep reporting without it.\n"
+             "क्या आप जाँच अधिकारियों के साथ अपना मोबाइल नंबर साझा करना चाहेंगे? यह वैकल्पिक है।")
+PHONE_KB = {"keyboard": [[{"text": SHARE_BTN, "request_contact": True}], [{"text": SKIP_BTN}]],
+            "resize_keyboard": True, "one_time_keyboard": True}
+NO_KB = {"remove_keyboard": True}
+BLOCKED = ("This Telegram account can no longer send reports to MuleWatch. If you think this is a mistake, "
+           "contact your nearest police station. Lost money? Call <b>1930</b>.")
+ASK_AGAIN_AFTER = 24 * 3600
+
+
+def _touch_reporter(uid: str, sender: dict) -> dict:
+    """Create or refresh the reporter's row; returns what the handler needs."""
+    name = " ".join(x for x in (sender.get("first_name"), sender.get("last_name")) if x)[:80]
+    with SessionLocal() as s:
+        r = s.get(Reporter, uid)
+        if not r:
+            r = Reporter(user_id=uid)
+            s.add(r)
+        r.name, r.username = name or r.name or "", (sender.get("username") or "")[:64]
+        out = {"blocked": bool(r.blocked), "phone": r.phone or "", "asked": r.phone_asked_at}
+        s.commit()
+    return out
+
+
+def _save_contact(uid: str, contact: dict) -> str:
+    if str(contact.get("user_id") or "") != uid:      # a forwarded contact card, not the person's own number
+        return "Please share <b>your own</b> number with the button below, or tap \"Not now\"."
+    phone = re.sub(r"[^\d+]", "", contact.get("phone_number") or "")
+    phone = phone if phone.startswith("+") else "+" + phone
+    with SessionLocal() as s:
+        r = s.get(Reporter, uid) or Reporter(user_id=uid)
+        r.phone, r.phone_at = phone[:20], datetime.utcnow()
+        s.merge(r)
+        s.commit()
+    return "Thank you. Investigators handling your reports can now call you back. धन्यवाद।"
+
+
+def _maybe_ask_phone(tg, chat_id, uid: str, rep: dict, force=False):
+    if rep["phone"] or (not force and rep["asked"] and (datetime.utcnow() - rep["asked"]).total_seconds() < ASK_AGAIN_AFTER):
+        return
+    tg.send(chat_id, ASK_PHONE, markup=PHONE_KB)
+    with SessionLocal() as s:
+        r = s.get(Reporter, uid)
+        if r:
+            r.phone_asked_at = datetime.utcnow()
+            s.commit()
+
+
 # ----------------------------------------------------------------------------- core handling
 
 _rate = defaultdict(deque)
@@ -234,6 +293,25 @@ def handle_update(update: dict, tg) -> None:
     chat_id = msg["chat"]["id"]
     mid = msg.get("message_id")
     text = (msg.get("text") or msg.get("caption") or "").strip()
+    uid = str((msg.get("from") or {}).get("id") or chat_id)
+    rep = _touch_reporter(uid, msg.get("from") or {})
+
+    if rep["blocked"]:
+        if text.startswith("/start") or text.startswith("/help"):
+            tg.send(chat_id, BLOCKED)
+        return                                       # nothing from a blocked account is filed
+    if msg.get("contact"):
+        tg.send(chat_id, _save_contact(uid, msg["contact"]), markup=NO_KB)
+        return
+    if text == SKIP_BTN:
+        tg.send(chat_id, "Okay. You can keep reporting without it; /phone shares it later.", markup=NO_KB)
+        return
+    if text.startswith("/phone"):
+        if rep["phone"]:
+            tg.send(chat_id, "You've already shared your number. Thank you.")
+        else:
+            _maybe_ask_phone(tg, chat_id, uid, rep, force=True)
+        return
 
     if text.startswith("/start"):
         tg.send(chat_id, WELCOME)
@@ -330,6 +408,7 @@ def handle_update(update: dict, tg) -> None:
         count = s.query(Report).filter_by(post_id=post.id).count()
         reply = verdict_text(post, count, already)
     tg.send(chat_id, reply, reply_to=mid)
+    _maybe_ask_phone(tg, chat_id, uid, rep)
     _status["handled"] += 1
     _status["last_update"] = datetime.utcnow().isoformat()
 
@@ -418,6 +497,7 @@ def _loop():
                     tg.call("setMyCommands", commands=[
                         {"command": "start", "description": "How to report a suspicious ad"},
                         {"command": "status", "description": "Your recent reports"},
+                        {"command": "phone", "description": "Share your number with investigators (optional)"},
                         {"command": "help", "description": "Help and safety tips"}])
                 except Exception:
                     pass

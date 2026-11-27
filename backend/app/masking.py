@@ -43,4 +43,7 @@ def apply(d: dict, viewer) -> dict:
         d["reasons"] = [mask_text(r) for r in d["reasons"]]
     if isinstance(d.get("related"), list):
         d["related"] = [apply(r, viewer) for r in d["related"]]
+    if isinstance(d.get("citizen_reports"), list):
+        d["citizen_reports"] = [r | {"phone": mask_value(r["phone"])} if r.get("phone") else r
+                                for r in d["citizen_reports"]]
     return d
